@@ -1,0 +1,287 @@
+[
+  {
+    "date": "2025-07-01",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217"
+  },
+  {
+    "date": "2025-07-02",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-02T04:35:00.000Z"
+  },
+  {
+    "date": "2025-07-03",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-03T04:25:00.000Z"
+  },
+  {
+    "date": "2025-07-04",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-04T04:20:00.000Z"
+  },
+  {
+    "date": "2025-07-05",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-05T04:35:00.000Z"
+  },
+  {
+    "date": "2025-07-06",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-06T04:30:00.000Z"
+  },
+  {
+    "date": "2025-07-07",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-07T04:30:00.000Z"
+  },
+  {
+    "date": "2025-07-08",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217"
+  },
+  {
+    "date": "2025-07-09",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-09T04:35:00.000Z"
+  },
+  {
+    "date": "2025-07-10",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-10T04:30:00.000Z"
+  },
+  {
+    "date": "2025-07-11",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-11T04:25:00.000Z"
+  },
+  {
+    "date": "2025-07-12",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-12T04:30:00.000Z"
+  },
+  {
+    "date": "2025-07-13",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-13T04:30:00.000Z"
+  },
+  {
+    "date": "2025-07-14",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-14T04:30:00.000Z"
+  },
+  {
+    "date": "2025-07-16",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "login": "2025-07-16T04:35:00.000Z"
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-17",
+    "login": "2025-07-17T04:47:19.288Z",
+    "istLoginTime": "2025-07-17T10:17:19.288Z"
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-18",
+    "login": "2025-07-18T04:57:18.971Z",
+    "istLoginTime": "2025-07-18T04:57:18.000Z"
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-19",
+    "login": "2025-07-19T04:54:31.227Z",
+    "istLoginTime": "2025-07-19T04:54:31.000Z"
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-20",
+    "login": "2025-07-20T04:58:07.057Z",
+    "istLoginTime": "2025-07-20T04:58:07.000Z"
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-21",
+    "login": "2025-07-21T04:57:34.242Z",
+    "istLoginTime": "2025-07-21T04:57:34.000Z"
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-24",
+    "login": "2025-07-24T05:16:34.000Z",
+    "istLoginTime": "2025-07-24T05:16:34.000Z",
+    "location": {
+      "latitude": 28.6276098,
+      "longitude": 77.378824,
+      "address": "Sector 63, Noida, दादरी, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-25",
+    "login": "2025-07-25T05:11:37.078Z",
+    "istLoginTime": "2025-07-25T05:11:37.000Z",
+    "location": {
+      "latitude": 28.6654464,
+      "longitude": 77.1653632,
+      "address": "Prem Nagar, Saraswati Vihar Tehsil, North West Delhi, Delhi, 110035, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-26",
+    "login": "2025-07-26T05:07:11.822Z",
+    "istLoginTime": "2025-07-26T05:07:11.000Z",
+    "location": {
+      "latitude": 28.557312,
+      "longitude": 77.283328,
+      "address": "Gaffar Manzil, Shaheen Bagh, Sarita Vihar Tehsil, South East Delhi, Delhi, 110025, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-27",
+    "login": "2025-07-27T05:06:57.799Z",
+    "istLoginTime": "2025-07-27T05:06:57.000Z",
+    "location": {
+      "latitude": 28.627578,
+      "longitude": 77.3787534,
+      "address": "Sector 63, Noida, दादरी, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-28",
+    "login": "2025-07-28T04:57:46.332Z",
+    "istLoginTime": "2025-07-28T04:57:46.000Z",
+    "location": {
+      "latitude": 28.6275832,
+      "longitude": 77.3787769,
+      "address": "Sector 63, Noida, दादरी, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-07-31",
+    "login": "2025-07-31T05:27:46.332Z",
+    "istLoginTime": "2025-07-31T05:27:46.000Z",
+    "location": {
+      "latitude": 28.6275832,
+      "longitude": 77.3787769,
+      "address": "Sector 63, Noida, दादरी, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-08-01",
+    "login": "2025-08-01T04:53:34.195Z",
+    "istLoginTime": "2025-08-01T04:53:34.000Z",
+    "location": {
+      "latitude": 28.6195712,
+      "longitude": 77.381632,
+      "address": "Sector 63, Noida, दादरी, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-08-02",
+    "login": "2025-08-02T04:57:56.469Z",
+    "istLoginTime": "2025-08-02T04:57:56.000Z",
+    "location": {
+      "latitude": 28.6752768,
+      "longitude": 77.1391488,
+      "address": "Punjabi Bagh, Saraswati Vihar Tehsil, North West Delhi, Delhi, 110026, India"
+    }
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-08-03",
+    "login": "2025-08-03T04:52:37.036Z",
+    "istLoginTime": "2025-08-03T04:52:37.000Z",
+    "location": {
+      "latitude": 28.6275512,
+      "longitude": 77.3787283,
+      "address": "Sector 63, Noida, दादरी, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    }
+  },
+  {
+    "email": "chaudharyg9876@gmail.com",
+    "date": "2025-08-09",
+    "status": "Leave"
+  },
+  {
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-08-04",
+    "login": "2025-08-04T04:31:53.228Z",
+    "istLoginTime": "2025-08-04T04:31:53.000Z",
+    "location": {
+      "latitude": 28.6275512,
+      "longitude": 77.3787283,
+      "address": "Sector 63, Noida, दादरी, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    },
+    "device": {
+      "browser": "Chrome Mobile",
+      "os": "Android 6.0",
+      "description": "Chrome Mobile 138.0.0.0 on Google Nexus 5 (Android 6.0)",
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+      "screen": "1313x739"
+    }
+  }
+]

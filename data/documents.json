@@ -1,0 +1,12 @@
+[
+  {
+    "employeeId": "IE25006",
+    "hashedPassword": "$2b$10$Mx0oD3IjziCuit36w5yrvO/AFC2MdBL4S6kbvwxP6oIv1K0d30zPC",
+    "files": {
+      "aadhar": "IE25006_aadhar_1754030399957.pdf",
+      "pan": "IE25006_pan_1754030399958.pdf",
+      "bank": "IE25006_bank_1754030399959.jpg",
+      "photo": "IE25006_photo_1754030399959.png"
+    }
+  }
+]

@@ -1,0 +1,55 @@
+[
+  {
+    "id": "IE25001",
+    "name": "Rohit Pathak",
+    "email": "rpathak9103@gmail.com",
+    "number": "9716969103",
+    "designation": "Founder",
+    "joiningDate": "2025-01-01"
+  },
+  {
+    "id": "IE25002",
+    "name": "Nayan Saikia",
+    "email": "nayanisavailable@gmail.com",
+    "number": "9711221259",
+    "designation": "Co-Founder",
+    "joiningDate": "2025-01-01"
+  },
+  {
+    "id": "IE25003",
+    "name": "Vipul Jain",
+    "email": "vipuljain1985@gmail.com",
+    "number": "9999853743",
+    "salary": 30000,
+    "designation": "Sales Head",
+    "joiningDate": "2025-01-15"
+  },
+  {
+    "id": "IE25004",
+    "name": "Divyansh Joshi",
+    "email": "divyanshjoshikd@gmail.com",
+    "number": "8285252945",
+    "salary": 30000,
+    "designation": "Sales Head",
+    "joiningDate": "2025-02-26"
+  },
+  {
+    "id": "IE25005",
+    "name": "Gaurav",
+    "email": "gauravsoni518@gmail.com",
+    "number": "8383954230",
+    "salary": 23000,
+    "designation": "Sales Telecaller",
+    "joiningDate": "2025-05-22"
+  },
+  {
+    "id": "IE25006",
+    "name": "Gaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "salary": 18000,
+    "designation": "Web Developer",
+    "joiningDate": "2025-05-26",
+    "password": "$2b$10$IEsUKGfwwTWrY0ZhLytmbOZY0gU8nyPAz4rElLRUksXKp9l.mvVFu"
+  }
+]
