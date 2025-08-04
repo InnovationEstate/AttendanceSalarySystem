@@ -1,6 +1,6 @@
 // pages/api/attendance/mark.js
 import { markAttendance } from '@/lib/attendanceStore'
-import { getCurrentISTDate, getCurrentISTTime } from '../../utils/attendanceUtils'
+import { getCurrentISTDate, getCurrentISTTime } from '../../../utils/attendanceUtils'
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
