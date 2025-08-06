@@ -69,7 +69,7 @@ export default function EmployeeLogin() {
         name,
         email,
         number,
-        password,
+        password,       // include password for login API
         location: {
           latitude: coords.latitude,
           longitude: coords.longitude,
@@ -89,12 +89,20 @@ export default function EmployeeLogin() {
 
     if (!res.ok) throw new Error(data.error || "Login failed");
 
-    localStorage.setItem("employee", JSON.stringify(data.employee));
+    // Save employee info including password in localStorage
+    localStorage.setItem("employee", JSON.stringify({
+      name: data.employee.name,
+      email: data.employee.email,
+      number: data.employee.number,
+      password: password,  // save the password user entered
+    }));
+
     router.push("/employee/attendance");
   } catch (err) {
     setError(err.message || "Login failed");
   }
 };
+
 
 
   return (

@@ -1,6 +1,5 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import platform from "platform";
 import { useRouter } from "next/navigation";
 import getAttendanceSummary from "../../utils/attendanceUtils";
 import { UAParser } from "ua-parser-js";
@@ -50,14 +49,21 @@ export default function Dashboard() {
   }, []);
 
   const markAttendance = async (
-    emp,
     fetchSummary,
     setMessage,
     setLoading,
     router
   ) => {
+    // Get employee from localStorage
+    const emp = JSON.parse(localStorage.getItem("employee"));
+
     if (!emp) {
       setMessage("❌ Employee data not found. Please log in again.");
+      return;
+    }
+
+    if (!emp.password) {
+      setMessage("❌ Password missing. Please log in again.");
       return;
     }
 
@@ -72,16 +78,14 @@ export default function Dashboard() {
       model: result.device.model || "Unknown",
       vendor: result.device.vendor || "Unknown",
       os: `${result.os.name || "Unknown"} ${result.os.version || ""}`.trim(),
-      browser: `${result.browser.name || "Unknown"} ${
-        result.browser.version || ""
-      }`.trim(),
+      browser: `${result.browser.name || "Unknown"} ${result.browser.version || ""}`.trim(),
       screen: `${window.screen.width}x${window.screen.height}`,
       userAgent: navigator.userAgent,
     };
 
     // Step 2: Get geolocation coordinates
-    const getLocation = () => {
-      return new Promise((resolve, reject) => {
+    const getLocation = () =>
+      new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
           reject(new Error("Geolocation not supported by this browser"));
           return;
@@ -106,16 +110,13 @@ export default function Dashboard() {
           }
         );
       });
-    };
 
     // Step 3: Reverse geocode lat/lon to address string
     const getAddressFromCoords = async ({ latitude, longitude }) => {
       try {
         const response = await fetch("/api/geo/reverse", {
           method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
+          headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ latitude, longitude }),
         });
 
@@ -131,6 +132,7 @@ export default function Dashboard() {
       const coords = await getLocation();
       const address = await getAddressFromCoords(coords);
 
+      // Send login request with stored password
       const res = await fetch("/api/employee/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -138,6 +140,7 @@ export default function Dashboard() {
           name: emp.name,
           email: emp.email,
           number: emp.number,
+          password: emp.password, // IMPORTANT: send password stored locally
           location: {
             latitude: coords.latitude,
             longitude: coords.longitude,
@@ -203,7 +206,7 @@ export default function Dashboard() {
 
           <button
             onClick={() =>
-              markAttendance(emp, fetchSummary, setMessage, setLoading, router)
+              markAttendance(fetchSummary, setMessage, setLoading, router)
             }
             disabled={loading}
             className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg shadow transition duration-300 disabled:opacity-50"
