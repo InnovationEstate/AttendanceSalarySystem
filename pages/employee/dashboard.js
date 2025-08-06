@@ -111,17 +111,16 @@ export default function Dashboard() {
     // Step 3: Reverse geocode lat/lon to address string
     const getAddressFromCoords = async ({ latitude, longitude }) => {
       try {
-        const response = await fetch(
-          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-          {
-            headers: {
-              "User-Agent":
-                "attendance-salary-tracker/1.0 (innovationestate.in@gmail.com)",
-            },
-          }
-        );
+        const response = await fetch("/api/geo/reverse", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ latitude, longitude }),
+        });
+
         const data = await response.json();
-        return data.display_name || "Unknown location";
+        return data.address || "Unknown location";
       } catch (err) {
         console.error("Reverse geocoding failed:", err);
         return "Unknown location";

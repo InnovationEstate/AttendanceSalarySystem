@@ -1,3 +1,4 @@
+// pages/employee/login.js
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -41,60 +42,60 @@ export default function EmployeeLogin() {
     });
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setError(null);
+ const handleSubmit = async (e) => {
+  e.preventDefault();
+  setError(null);
 
-    const { name, email, number, password } = form;
-    if (!name || !email || !number || !password) {
-      setError("All fields including password are required.");
+  const { name, email, number, password } = form;
+  if (!name || !email || !number || !password) {
+    setError("All fields including password are required.");
+    return;
+  }
+
+  try {
+    const coords = await getLocation();
+
+    const addressRes = await fetch("/api/geo/reverse", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(coords),
+    });
+    const { address } = await addressRes.json();
+
+    const res = await fetch("/api/employee/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name,
+        email,
+        number,
+        password,
+        location: {
+          latitude: coords.latitude,
+          longitude: coords.longitude,
+          address,
+        },
+        device: navigator.userAgent,
+      }),
+    });
+
+    const data = await res.json();
+    console.log("Login response:", data);
+
+    if (data.needPasswordSetup) {
+      router.push(`/employee/set-password?email=${encodeURIComponent(data.email)}`);
       return;
     }
 
-    try {
-      const coords = await getLocation();
+    if (!res.ok) throw new Error(data.error || "Login failed");
 
-      // Get address from your API or fallback to unknown
-      const addressRes = await fetch("/api/geo/reverse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(coords),
-      });
-      const { address } = await addressRes.json();
+    localStorage.setItem("employee", JSON.stringify(data.employee));
+    router.push("/employee/attendance");
+  } catch (err) {
+    setError(err.message || "Login failed");
+  }
+};
 
-      const res = await fetch("/api/employee/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          name,
-          email,
-          number,
-          password, // ✅ include password in request
-          location: {
-            latitude: coords.latitude,
-            longitude: coords.longitude,
-            address,
-          },
-          device: navigator.userAgent,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (data.needPasswordSetup) {
-        // Redirect to set-password with email query param
-        router.push(`/employee/set-password?email=${encodeURIComponent(data.email)}`);
-        return;
-      }
-
-      if (!res.ok) throw new Error(data.error || "Login failed");
-
-      localStorage.setItem("employee", JSON.stringify(data.employee));
-      router.push("/employee/attendance");
-    } catch (err) {
-      setError(err.message || "Login failed");
-    }
-  };
 
   return (
     <div className="max-w-md mx-auto p-6 mt-10 border rounded shadow bg-white">

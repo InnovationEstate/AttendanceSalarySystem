@@ -1,6 +1,6 @@
 import fs from "fs";
 import path from "path";
-import bcrypt from "bcrypt";
+import bcrypt from "bcryptjs";
 
 const employeesFile = path.join(process.cwd(), "data", "employees.json");
 
@@ -43,7 +43,7 @@ export default async function handler(req, res) {
       return res.status(404).json({ error: "Employee not found" });
     }
 
-    if (employees[index].password) {
+    if (employees[index].password && employees[index].password.trim() !== "") {
       return res
         .status(400)
         .json({ error: "Password already set for this employee" });
@@ -53,6 +53,8 @@ export default async function handler(req, res) {
     employees[index].password = hashedPassword;
 
     writeJSON(employeesFile, employees);
+
+    console.log(`Password set for employee ${email}`);
 
     return res.status(200).json({ success: true });
   } catch (err) {

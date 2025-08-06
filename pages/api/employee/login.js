@@ -30,7 +30,6 @@ export default async function handler(req, res) {
   const employees = readJSON(employeesFile);
   const attendance = readJSON(attendanceFile);
 
-  // 🔐 Find the employee
   const employee = employees.find(
     (e) =>
       e.email.toLowerCase() === email.toLowerCase().trim() &&
@@ -41,9 +40,8 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Employee not registered" });
   }
 
-  // 🔐 Check if password is set
-  if (!employee.password) {
-    // Instead of error, tell frontend to redirect to set-password page
+  // Strict check for password presence
+  if (!employee.password || employee.password.trim() === "") {
     return res.status(200).json({
       needPasswordSetup: true,
       message: "Password not set for this employee. Please set password first.",
@@ -56,7 +54,7 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Incorrect password" });
   }
 
-  // 🕒 Time validation
+  // Time validation code unchanged...
   const nowUTC = new Date();
   const nowISTStr = nowUTC.toLocaleString("en-US", {
     timeZone: "Asia/Kolkata",
@@ -74,7 +72,7 @@ export default async function handler(req, res) {
     });
   }
 
-  // 📝 Log attendance
+  // Log attendance unchanged
   const alreadyLogged = attendance.find(
     (a) => a.date === todayStr && a.email.toLowerCase() === email.toLowerCase()
   );
