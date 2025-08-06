@@ -67,7 +67,12 @@ export default function EmployeeLogin() {
 
     try {
       const coords = await getLocation();
-      const address = await getAddressFromCoords(coords);
+      const addressRes = await fetch("/api/geo/reverse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(coords),
+      });
+      const { address } = await addressRes.json();
 
       const res = await fetch("/api/employee/login", {
         method: "POST",
@@ -98,7 +103,9 @@ export default function EmployeeLogin() {
 
   return (
     <div className="max-w-md mx-auto p-6 mt-10 border rounded shadow bg-white">
-      <h2 className="text-2xl mb-6 text-center font-semibold">Employee Login</h2>
+      <h2 className="text-2xl mb-6 text-center font-semibold">
+        Employee Login
+      </h2>
       {error && (
         <div className="mb-4 text-red-600 bg-red-100 p-2 rounded">{error}</div>
       )}

@@ -33,7 +33,6 @@ export default async function handler(req, res) {
   // 🔐 Find the employee
   const employee = employees.find(
     (e) =>
-      e.name.toLowerCase() === name.toLowerCase().trim() &&
       e.email.toLowerCase() === email.toLowerCase().trim() &&
       e.number === number.trim()
   );

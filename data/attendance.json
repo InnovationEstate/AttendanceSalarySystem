@@ -283,5 +283,19 @@
       "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
       "screen": "1313x739"
     }
+  },
+  {
+    "name": "Gaaurav Thenua",
+    "email": "chaudharyg9876@gmail.com",
+    "number": "7248715217",
+    "date": "2025-08-06",
+    "login": "2025-08-06T05:03:47.411Z",
+    "istLoginTime": "2025-08-06T05:03:47.000Z",
+    "location": {
+      "latitude": 28.6195712,
+      "longitude": 77.3554176,
+      "address": "Khora, Noida, Dadri, Gautam Buddha Nagar, Uttar Pradesh, 201309, India"
+    },
+    "device": "Mozilla/5.0 (Linux; Android 6.0; Nexus 5 Build/MRA58N) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Mobile Safari/537.36"
   }
 ]
