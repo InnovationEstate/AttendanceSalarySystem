@@ -1,26 +1,13 @@
 import formidable from "formidable";
-import fs from "fs";
-import path from "path";
+import { getStorage } from "firebase-admin/storage";
+import { db } from "../../../lib/firebaseAdmin"; // your Firebase Admin SDK initialized instance
 import bcrypt from "bcryptjs";
+import path from "path";
+import fs from "fs";
 
 export const config = {
-  api: { bodyParser: false }, // Required for formidable
+  api: { bodyParser: false }, // required for formidable
 };
-
-const uploadsDir = path.join(process.cwd(), "uploads-private");
-const metadataFile = path.join(process.cwd(), "data", "documents.json");
-
-// Ensure uploads and data directories exist
-function ensureUploadsDir() {
-  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-function ensureMetadataFile() {
-  if (!fs.existsSync(metadataFile)) {
-    fs.mkdirSync(path.dirname(metadataFile), { recursive: true });
-    fs.writeFileSync(metadataFile, "[]", "utf-8");
-  }
-}
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -28,20 +15,17 @@ export default async function handler(req, res) {
   }
 
   try {
-    ensureUploadsDir();
-    ensureMetadataFile();
-
-    const form = formidable({
+    // Parse form data
+    const form = new formidable.IncomingForm({
       multiples: true,
-      uploadDir: uploadsDir,
       keepExtensions: true,
+      maxFileSize: 10 * 1024 * 1024, // optional max file size (10MB)
     });
 
-    // Parse form using Promise to use try-catch cleanly
     const data = await new Promise((resolve, reject) => {
       form.parse(req, (err, fields, files) => {
-        if (err) return reject(err);
-        resolve({ fields, files });
+        if (err) reject(err);
+        else resolve({ fields, files });
       });
     });
 
@@ -53,65 +37,74 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing employeeId or password" });
     }
 
+    // Password strength check
     const strongPasswordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/;
     if (!strongPasswordRegex.test(password)) {
       return res.status(400).json({ error: "Password not strong enough" });
     }
 
-    // Read metadata file
-    let metadata = [];
-    try {
-      const rawData = fs.readFileSync(metadataFile, "utf-8");
-      metadata = JSON.parse(rawData);
-    } catch (err) {
-      console.error("Failed to parse metadata file:", err);
-      return res.status(500).json({ error: "Failed to read metadata" });
-    }
+    // Fetch metadata from Firebase DB
+    const docRef = db.ref(`documents/${employeeId}`);
+    const snapshot = await docRef.once("value");
+    const existingRecord = snapshot.val();
 
-    let employeeRecord = metadata.find((e) => e.employeeId === employeeId);
+    let hashedPassword = null;
 
-    if (!employeeRecord) {
-      const hashedPassword = await bcrypt.hash(password, 10);
-      employeeRecord = { employeeId, hashedPassword, files: {} };
-      metadata.push(employeeRecord);
+    if (!existingRecord) {
+      // New user → hash password and create record
+      hashedPassword = await bcrypt.hash(password, 10);
     } else {
-      const match = await bcrypt.compare(password, employeeRecord.hashedPassword);
-      if (!match) {
-        return res.status(401).json({ error: "Incorrect password" });
-      }
+      // Existing user → verify password
+      const match = await bcrypt.compare(password, existingRecord.hashedPassword);
+      if (!match) return res.status(401).json({ error: "Incorrect password" });
+
+      hashedPassword = existingRecord.hashedPassword;
     }
 
-    // Save each file
+    // Prepare to upload files to Firebase Storage
+    const storage = getStorage();
+    const bucket = storage.bucket();
+
+    // Files map to keep updated filenames for DB
+    const updatedFiles = existingRecord?.files || {};
+
     for (const docKey in files) {
-      const file = files[docKey];
+      let file = files[docKey];
       if (!file) continue;
 
-      const f = Array.isArray(file) ? file[0] : file;
-      const ext = path.extname(f.originalFilename || "");
+      if (Array.isArray(file)) file = file[0]; // handle multiple files
+
+      // Generate a safe unique filename
+      const ext = path.extname(file.originalFilename || "");
       const safeName = `${employeeId}_${docKey}_${Date.now()}${ext}`;
-      const destPath = path.join(uploadsDir, safeName);
 
-      try {
-        fs.renameSync(f.filepath, destPath);
-        employeeRecord.files[docKey] = safeName;
-      } catch (moveErr) {
-        console.error(`Failed to move file ${docKey}:`, moveErr);
-        return res.status(500).json({ error: `Failed to save ${docKey}` });
-      }
+      // Upload to Firebase Storage under documents/<employeeId>/
+      const destination = `documents/${employeeId}/${safeName}`;
+
+      await bucket.upload(file.filepath, {
+        destination,
+        metadata: {
+          contentType: file.mimetype || "application/octet-stream",
+        },
+      });
+
+      // Update file name reference
+      updatedFiles[docKey] = safeName;
+
+      // Remove temp file
+      fs.unlinkSync(file.filepath);
     }
 
-    // Write metadata back
-    try {
-      fs.writeFileSync(metadataFile, JSON.stringify(metadata, null, 2), "utf-8");
-    } catch (writeErr) {
-      console.error("Failed to save metadata file:", writeErr);
-      return res.status(500).json({ error: "Failed to update metadata" });
-    }
+    // Save updated metadata back to Realtime DB
+    await docRef.set({
+      employeeId,
+      hashedPassword,
+      files: updatedFiles,
+    });
 
     return res.status(200).json({ success: true });
-
-  } catch (outerErr) {
-    console.error("Unexpected server error:", outerErr);
+  } catch (error) {
+    console.error("Upload error:", error);
     return res.status(500).json({ error: "Unexpected server error" });
   }
 }

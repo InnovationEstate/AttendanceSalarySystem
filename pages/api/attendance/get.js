@@ -1,18 +1,30 @@
 // pages/api/attendance/get.js
-import fs from 'fs';
-import path from 'path';
+import { db } from "../../../lib/firebase";
+import { ref, get } from "firebase/database";
 
-const attendanceFile = path.join(process.cwd(), 'data', 'attendance.json');
-
-const readJSON = (file) => {
+export default async function handler(req, res) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch {
-    return [];
-  }
-};
+    const rootRef = ref(db, "attendance");
+    const snapshot = await get(rootRef);
 
-export default function handler(req, res) {
-  const attendance = readJSON(attendanceFile);
-  res.status(200).json({ data: attendance });
+    if (!snapshot.exists()) {
+      return res.status(200).json({ data: [] });
+    }
+
+    const data = snapshot.val(); // structure: { "2025-08-01": { id1: {...}, id2: {...} }, ... }
+
+    const records = [];
+
+    for (const date in data) {
+      const dailyRecords = data[date];
+      for (const id in dailyRecords) {
+        records.push(dailyRecords[id]);
+      }
+    }
+
+    return res.status(200).json({ data: records });
+  } catch (err) {
+    console.error("❌ Error fetching attendance:", err);
+    return res.status(500).json({ error: "Failed to fetch attendance" });
+  }
 }

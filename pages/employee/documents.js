@@ -1,6 +1,16 @@
 "use client";
 
 import { useState } from "react";
+import {
+  db,
+  storage,
+} from "../../lib/firebase"; // Your Firebase client exports: initialized Realtime DB & Storage
+import { ref as dbRef, get, update } from "firebase/database";
+import {
+  ref as storageRef,
+  uploadBytes,
+  getDownloadURL,
+} from "firebase/storage";
 
 const requiredDocs = ["aadhar", "pan", "bank", "photo"];
 const optionalDocs = ["experience"];
@@ -17,13 +27,13 @@ export default function EmployeeDocuments() {
   const [loading, setLoading] = useState(false);
 
   const handleChange = (e) => {
-    setDocs({ ...docs, [e.target.name]: e.target.files });
+    setDocs({ ...docs, [e.target.name]: e.target.files[0] });
   };
 
   const isStrongPassword = (pass) =>
     /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pass);
 
-  // Verify existing user or initialize new user creation
+  // Verify employee password via API
   const verifyOrInitialize = async () => {
     setMessage("");
     if (!employeeId) {
@@ -44,32 +54,19 @@ export default function EmployeeDocuments() {
         body: JSON.stringify({ employeeId, password }),
       });
 
+      console.log("Meta response:", metaRes);
+
       if (metaRes.ok) {
         const metaData = await metaRes.json();
         if (metaData.success) {
           setVerified(true);
           setIsNewUser(false);
-          setMessage(
-            "Password verified! You can now view or upload documents."
-          );
-
-          const filesRes = await fetch("/api/documents/get", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ employeeId, password }),
-          });
-
-          if (filesRes.ok) {
-            const filesData = await filesRes.json();
-            setExistingDocs(filesData.files || {});
-          } else {
-            setExistingDocs({});
-          }
+          setMessage("Password verified! You can now view or upload documents.");
+          await fetchExistingDocs(employeeId);
         } else {
           setMessage("Verification failed.");
         }
       } else if (metaRes.status === 404) {
-        // Employee not found → New user
         setIsNewUser(true);
         setVerified(false);
         setMessage(
@@ -86,158 +83,143 @@ export default function EmployeeDocuments() {
     }
   };
 
-  // New user: set password and upload docs
-  const handleCreatePasswordAndUpload = async () => {
+  // Fetch existing document metadata from Firebase Realtime Database
+  const fetchExistingDocs = async (empId) => {
+    setLoading(true);
+    try {
+      const snapshot = await get(dbRef(db, `documents/${empId}`));
+      if (snapshot.exists()) {
+        setExistingDocs(snapshot.val().files || {});
+      } else {
+        setExistingDocs({});
+      }
+    } catch (error) {
+      setMessage("Failed to fetch existing documents: " + error.message);
+      setExistingDocs({});
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Upload files to Firebase Storage and update metadata in Realtime Database
+  const uploadDocuments = async (useNewPassword = false) => {
     setMessage("");
     if (!employeeId) {
-      setMessage("Employee ID missing");
+      setMessage("Employee ID is required");
       return;
     }
-    if (!isStrongPassword(newPassword)) {
-      setMessage(
-        "Password must be at least 8 characters and include uppercase, lowercase, number, and special character."
-      );
-      return;
-    }
-    for (const doc of requiredDocs) {
-      if (!docs[doc]?.[0]) {
-        setMessage(`Missing required document: ${doc}`);
+
+    if (useNewPassword) {
+      if (!newPassword) {
+        setMessage("Please enter a new password");
         return;
       }
-    }
-
-    setLoading(true);
-
-    try {
-      const formData = new FormData();
-      formData.append("employeeId", employeeId);
-      formData.append("password", newPassword);
-      for (const doc of [...requiredDocs, ...optionalDocs]) {
-        if (docs[doc]?.[0]) {
-          formData.append(doc, docs[doc][0]);
-        }
-      }
-
-      const res = await fetch("/api/documents/upload", {
-        method: "POST",
-        body: formData,
-      });
-
-      const result = await res.json();
-
-      if (res.ok && result.success) {
-        setMessage("Password created and documents uploaded successfully!");
-        setVerified(true);
-        setIsNewUser(false);
-        setPassword(newPassword); // Set password for further use
-        setNewPassword("");
-
-        const filesRes = await fetch("/api/documents/get", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ employeeId, password }),
-        });
-
-        if (filesRes.ok) {
-          const filesData = await filesRes.json();
-          setExistingDocs(filesData.files || {});
-        } else {
-          setExistingDocs({});
-        }
-      } else {
+      if (!isStrongPassword(newPassword)) {
         setMessage(
-          result.error || "Failed to create password and upload documents."
+          "Password must be 8+ characters with uppercase, lowercase, number, and special character"
         );
+        return;
       }
-    } catch (error) {
-      setMessage("Error uploading documents: " + error.message);
-    } finally {
-      setLoading(false);
+    } else {
+      if (!password) {
+        setMessage("Please enter password");
+        return;
+      }
     }
-  };
 
-  // Existing user upload docs
-  const handleUpload = async () => {
-    setMessage("");
-    if (!employeeId || !password) {
-      setMessage("Missing Employee ID or Password.");
-      return;
-    }
+    // Check all required docs are selected
     for (const doc of requiredDocs) {
-      if (!docs[doc]?.[0] && !existingDocs[doc]) {
-        setMessage(`Missing required document: ${doc}`);
+      if (!docs[doc] && !existingDocs[doc]) {
+        setMessage(`Please upload required document: ${doc}`);
         return;
       }
     }
 
     setLoading(true);
-
     try {
-      const formData = new FormData();
-      formData.append("employeeId", employeeId);
-      formData.append("password", password);
-      for (const doc of [...requiredDocs, ...optionalDocs]) {
-        if (docs[doc]?.[0]) {
-          formData.append(doc, docs[doc][0]);
-        }
+      // Upload files to Storage
+      const uploadedFiles = { ...existingDocs };
+
+      for (const key of Object.keys(docs)) {
+        const file = docs[key];
+        if (!file) continue;
+
+        const fileExt = file.name.split(".").pop();
+        const storagePath = `documents/${employeeId}/${key}_${Date.now()}.${fileExt}`;
+        const fileRef = storageRef(storage, storagePath);
+
+        await uploadBytes(fileRef, file);
+
+        // Save just the storage path or filename to DB metadata
+        uploadedFiles[key] = {
+          name: storagePath,
+          originalName: file.name,
+        };
       }
 
-      const res = await fetch("/api/documents/upload", {
-        method: "POST",
-        body: formData,
-      });
+      // Update metadata in Realtime Database
+      const docRef = dbRef(db, `documents/${employeeId}`);
 
-      const result = await res.json();
-
-      if (res.ok && result.success) {
-        setMessage("Documents uploaded successfully!");
-        const filesRes = await fetch("/api/documents/get", {
+      // If new user, include password for backend to hash later (or call your API)
+      // But since we can't hash client-side securely, call an API to set password here:
+      if (useNewPassword) {
+        const resp = await fetch("/api/documents/create-password-and-upload", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ employeeId, password }),
+          body: (() => {
+            const formData = new FormData();
+            formData.append("employeeId", employeeId);
+            formData.append("password", newPassword);
+            // Append files to formData for server upload
+            for (const key of Object.keys(docs)) {
+              formData.append(key, docs[key]);
+            }
+            return formData;
+          })(),
         });
 
-        if (filesRes.ok) {
-          const filesData = await filesRes.json();
-          setExistingDocs(filesData.files || {});
+        if (!resp.ok) {
+          const err = await resp.json();
+          throw new Error(err.error || "Failed to create password and upload");
         }
+        setIsNewUser(false);
+        setVerified(true);
+        setPassword(newPassword);
+        setMessage("Password set and documents uploaded successfully");
+        await fetchExistingDocs(employeeId);
       } else {
-        setMessage(result.error || "Upload failed.");
+        // Existing user: just update files metadata in DB
+        await update(docRef, { files: uploadedFiles });
+        setMessage("Documents uploaded successfully");
+        await fetchExistingDocs(employeeId);
       }
+
+      setDocs({});
     } catch (error) {
-      setMessage("Error uploading documents: " + error.message);
+      setMessage("Upload failed: " + error.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // View uploaded document
+  // View document by fetching download URL from Firebase Storage
   const viewDocument = async (docKey) => {
-    if (!employeeId || (!password && !isNewUser)) {
-      alert("Missing employee ID or password");
+    if (!employeeId) {
+      alert("Missing Employee ID");
       return;
     }
+
+    const fileMeta = existingDocs[docKey];
+    if (!fileMeta) {
+      alert("No file available for this document.");
+      return;
+    }
+
     try {
-      const res = await fetch("/api/documents/serve", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId,
-          password: isNewUser ? newPassword : password,
-          docKey,
-        }),
-      });
-
-      if (!res.ok) {
-        alert("Access denied or file not found.");
-        return;
-      }
-
-      const blob = await res.blob();
-      const url = window.URL.createObjectURL(blob);
+      const fileRef = storageRef(storage, fileMeta.name);
+      const url = await getDownloadURL(fileRef);
       window.open(url, "_blank");
-    } catch {
-      alert("Error fetching the document.");
+    } catch (error) {
+      alert("Error fetching document: " + error.message);
     }
   };
 
@@ -307,7 +289,7 @@ export default function EmployeeDocuments() {
               </div>
             ))}
             <button
-              onClick={handleCreatePasswordAndUpload}
+              onClick={() => uploadDocuments(true)}
               className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 mt-4 transition"
               disabled={loading}
             >
@@ -361,7 +343,7 @@ export default function EmployeeDocuments() {
 
                   {existingDocs[doc] && (
                     <div className="text-gray-500 text-sm italic">
-                      Uploaded: {existingDocs[doc]?.name || "Unknown file"}
+                      Uploaded: {existingDocs[doc]?.originalName || "Unknown file"}
                     </div>
                   )}
 
@@ -377,7 +359,7 @@ export default function EmployeeDocuments() {
             </div>
 
             <button
-              onClick={handleUpload}
+              onClick={() => uploadDocuments(false)}
               className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition"
               disabled={loading}
             >

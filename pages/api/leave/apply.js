@@ -1,29 +1,51 @@
-// pages/api/leave/apply.js
-import fs from 'fs';
-import path from 'path';
+import { db } from "../../../lib/firebaseAdmin"; // make sure your Firebase Admin is initialized here
 
-const leavePath = path.join(process.cwd(), "data/leaveRequests.json");
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
+  }
 
-export default function handler(req, res) {
-  if (req.method === "POST") {
-    const { email, date, reason } = JSON.parse(req.body);
-    const data = fs.existsSync(leavePath) ? JSON.parse(fs.readFileSync(leavePath)) : [];
+  try {
+    const { email, date, reason } = req.body;
 
-    // Prevent duplicate for same date
-    if (data.find(r => r.email === email && r.date === date)) {
+    if (!email || !date || !reason) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Reference to leaveRequests node
+    const leaveRef = db.ref("leaveRequests");
+
+    // Fetch all leave requests for this email & date to check duplicates
+    const snapshot = await leaveRef
+      .orderByChild("email")
+      .equalTo(email)
+      .once("value");
+
+    const requests = snapshot.val() || {};
+
+    // Check if any leave request for the same date exists for this email
+    const duplicate = Object.values(requests).some(
+      (r) => r.date === date
+    );
+
+    if (duplicate) {
       return res.status(400).json({ message: "Already applied for this date." });
     }
 
-    data.push({
-      id: `leave_${Date.now()}`,
+    // Add new leave request
+    const newLeaveRef = leaveRef.push();
+    await newLeaveRef.set({
+      id: newLeaveRef.key,
       email,
       date,
       reason,
       status: "pending",
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
 
-    fs.writeFileSync(leavePath, JSON.stringify(data, null, 2));
     return res.status(200).json({ message: "Leave request submitted." });
+  } catch (error) {
+    console.error("Error submitting leave request:", error);
+    return res.status(500).json({ error: "Internal server error" });
   }
 }

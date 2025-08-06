@@ -1,25 +1,6 @@
-import fs from "fs";
-import path from "path";
+import { db } from "../../../lib/firebase";
+import { ref, get, set, update } from "firebase/database";
 import bcrypt from "bcryptjs";
-
-const employeesFile = path.join(process.cwd(), "data", "employees.json");
-
-const readJSON = (file) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch (err) {
-    console.error("❌ Failed to read JSON:", err);
-    return [];
-  }
-};
-
-const writeJSON = (file, data) => {
-  try {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
-  } catch (err) {
-    console.error("❌ Failed to write JSON:", err);
-  }
-};
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
@@ -33,32 +14,28 @@ export default async function handler(req, res) {
   }
 
   try {
-    const employees = readJSON(employeesFile);
+    const empKey = email.replace(/\./g, "_");
+    const empRef = ref(db, `employees/${empKey}`);
+    const snapshot = await get(empRef);
 
-    const index = employees.findIndex(
-      (e) => e.email.toLowerCase().trim() === email.toLowerCase().trim()
-    );
-
-    if (index === -1) {
+    if (!snapshot.exists()) {
       return res.status(404).json({ error: "Employee not found" });
     }
 
-    if (employees[index].password && employees[index].password.trim() !== "") {
+    const existingData = snapshot.val();
+    if (existingData.password && existingData.password !== "") {
       return res
         .status(400)
         .json({ error: "Password already set for this employee" });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    employees[index].password = hashedPassword;
+    await update(empRef, { password: hashedPassword });
 
-    writeJSON(employeesFile, employees);
-
-    console.log(`Password set for employee ${email}`);
-
+    console.log(`✅ Password set for ${email}`);
     return res.status(200).json({ success: true });
   } catch (err) {
-    console.error("❌ Error in set-password API:", err);
+    console.error("❌ Firebase set-password error:", err);
     return res.status(500).json({ error: "Internal server error" });
   }
 }

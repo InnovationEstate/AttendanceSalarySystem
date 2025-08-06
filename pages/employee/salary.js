@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import { db } from "../../lib/firebase"; // Your Firebase client SDK instance
+import { ref, get } from "firebase/database";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import getAttendanceSummary from "../../utils/attendanceUtils";
@@ -9,6 +11,7 @@ export default function EmployeeSalary() {
   const [attendance, setAttendance] = useState([]);
   const [employee, setEmployee] = useState(null);
   const [selectedMonth, setSelectedMonth] = useState(null);
+  const [loading, setLoading] = useState(true);
 
   const now = new Date();
   const today = now.getDate();
@@ -17,59 +20,98 @@ export default function EmployeeSalary() {
 
   useEffect(() => {
     async function fetchData() {
-      const empLocal = JSON.parse(localStorage.getItem("employee"));
-      if (!empLocal) return;
+      setLoading(true);
+      try {
+        const empLocal = JSON.parse(localStorage.getItem("employee"));
+        if (!empLocal?.email) {
+          setLoading(false);
+          return;
+        }
 
-      const empRes = await fetch("/api/employee/getEmployees");
-      const empData = await empRes.json();
-      const fullEmployee = empData.find((e) => e.email === empLocal.email);
-      setEmployee(fullEmployee);
+        // 1. Fetch employees from Firebase and find matching by email
+        const employeesSnap = await get(ref(db, "employees"));
+        if (!employeesSnap.exists()) {
+          setEmployee(null);
+          setLoading(false);
+          return;
+        }
+        const employeesArray = Object.values(employeesSnap.val());
+        const fullEmployee = employeesArray.find(
+          (e) => e.email.toLowerCase() === empLocal.email.toLowerCase()
+        );
 
-      const attRes = await fetch("/api/attendance/get");
-      const attData = await attRes.json();
-      setAttendance(attData.data || []);
+        setEmployee(fullEmployee || null);
+
+        // 2. Fetch all attendance from Firebase
+        const attendanceSnap = await get(ref(db, "attendance"));
+        if (!attendanceSnap.exists()) {
+          setAttendance([]);
+        } else {
+          // attendance data structure is by date keys with objects of employee attendance
+          // Flatten all attendance records from all dates into one array
+          const attendanceObj = attendanceSnap.val();
+
+          const attendanceArr = Object.values(attendanceObj).flatMap((dateRecord) =>
+            Object.values(dateRecord)
+          );
+          setAttendance(attendanceArr);
+        }
+      } catch (error) {
+        console.error("Error fetching data from Firebase:", error);
+        setEmployee(null);
+        setAttendance([]);
+      } finally {
+        setLoading(false);
+      }
     }
 
     fetchData();
   }, []);
 
+  if (loading) {
+    return (
+      <div className="text-center py-10 text-gray-500">Loading...</div>
+    );
+  }
+
   if (!employee) {
-    return <div className="text-center py-10 text-gray-500">Loading...</div>;
+    return (
+      <div className="text-center py-10 text-red-600 font-semibold">
+        Employee data not found. Please login again.
+      </div>
+    );
   }
 
   const monthlySalary = Number(employee.salary) || 0;
 
-  // Month to display salary for
   const monthToShow = selectedMonth !== null ? selectedMonth : currentMonth;
 
-  // Total days in that month
   const totalDaysInMonth = new Date(currentYear, monthToShow + 1, 0).getDate();
 
-  // Use today's date if current month; else full month days for attendance summary
   const attendanceDaysCount =
     monthToShow === currentMonth ? today : totalDaysInMonth;
 
-  // Get attendance summary for selected month & days
-  const { present, half, leave, unpaidLeaves, unpaidHalfDays } =
-    getAttendanceSummary(
-      attendance,
-      monthToShow,
-      currentYear,
-      attendanceDaysCount,
-      true,
-      employee.email
-    );
+  const {
+    present,
+    half,
+    leave,
+    unpaidLeaves,
+    unpaidHalfDays,
+  } = getAttendanceSummary(
+    attendance,
+    monthToShow,
+    currentYear,
+    attendanceDaysCount,
+    true,
+    employee.email
+  );
 
-  // Employee considered present if present or half days > 0
   const attendanceExists = present + half > 0;
 
-  // Per day salary based on full month days
   const perDaySalary = monthlySalary / totalDaysInMonth;
 
-  // Days counted for salary calculation (partial month or full month)
   const daysCounted = attendanceDaysCount;
 
-  // Initialize salary variables
   let grossSalaryTillToday = 0;
   let totalDeduction = 0;
   let netSalary = 0;
@@ -81,7 +123,6 @@ export default function EmployeeSalary() {
     netSalary = grossSalaryTillToday - totalDeduction;
   }
 
-  // PDF generation function
   const generatePDFForMonth = (monthIndex) => {
     const selectedDate = new Date(currentYear, monthIndex, 1);
     const totalDaysInSelectedMonth = new Date(
@@ -93,15 +134,20 @@ export default function EmployeeSalary() {
     const pdfAttendanceDaysCount =
       monthIndex === currentMonth ? today : totalDaysInSelectedMonth;
 
-    const { present, half, leave, unpaidLeaves, unpaidHalfDays } =
-      getAttendanceSummary(
-        attendance,
-        monthIndex,
-        currentYear,
-        pdfAttendanceDaysCount,
-        true,
-        employee.email
-      );
+    const {
+      present,
+      half,
+      leave,
+      unpaidLeaves,
+      unpaidHalfDays,
+    } = getAttendanceSummary(
+      attendance,
+      monthIndex,
+      currentYear,
+      pdfAttendanceDaysCount,
+      true,
+      employee.email
+    );
 
     const attendanceExistsForPDF = present + half > 0;
 
@@ -148,7 +194,6 @@ export default function EmployeeSalary() {
 
   return (
     <div className="min-h-screen bg-gray-100 py-6 px-3 text-sm">
-      {/* 🔽 Controls */}
       <div className="max-w-2xl mx-auto flex flex-row justify-end items-center mb-4 gap-2">
         <select
           className="border border-gray-300 rounded px-2 py-1 bg-white shadow-sm text-sm"
@@ -178,7 +223,6 @@ export default function EmployeeSalary() {
         </button>
       </div>
 
-      {/* 🔽 Salary Slip Card */}
       <div className="max-w-2xl mx-auto bg-white rounded-lg shadow p-4">
         <h2 className="text-xl sm:text-2xl font-bold text-center text-blue-700 mb-4">
           Salary Slip

@@ -1,102 +1,54 @@
-import fs from "fs";
-import path from "path";
-import bcrypt from "bcryptjs";
-
-const employeesFile = path.join(process.cwd(), "data", "employees.json");
-const attendanceFile = path.join(process.cwd(), "data", "attendance.json");
-
-const readJSON = (file) => {
-  try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
-    return [];
-  }
-};
-
-const writeJSON = (file, data) => {
-  fs.writeFileSync(file, JSON.stringify(data, null, 2));
-};
+import { db } from "../../../lib/firebase";
+import { ref, get } from "firebase/database";
+import bcrypt from "bcrypt";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Method not allowed" });
-
-  const { name, email, number, password, location, device } = req.body;
-
-  if (!name || !email || !number || !password) {
-    return res.status(400).json({ error: "Missing fields" });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
-  const employees = readJSON(employeesFile);
-  const attendance = readJSON(attendanceFile);
+  try {
+    const { name, email, number, password, location, device } = req.body;
 
-  const employee = employees.find(
-    (e) =>
-      e.email.toLowerCase() === email.toLowerCase().trim() &&
-      e.number === number.trim()
-  );
+    const snapshot = await get(ref(db, "employees"));
 
-  if (!employee) {
-    return res.status(401).json({ error: "Employee not registered" });
-  }
+    if (!snapshot.exists()) {
+      return res.status(404).json({ error: "No employee records found." });
+    }
 
-  // Strict check for password presence
-  if (!employee.password || employee.password.trim() === "") {
+    // Your structure is array-like: [ {...}, {...} ]
+    const employees = Object.values(snapshot.val());
+
+    const matchedEmployee = employees.find(
+      (emp) =>
+        emp.email?.toLowerCase() === email.toLowerCase() &&
+        emp.name === name &&
+        emp.number === number
+    );
+
+    if (!matchedEmployee) {
+      return res.status(401).json({ error: "Employee not registered" });
+    }
+
+    const passwordMatch = await bcrypt.compare(password, matchedEmployee.password);
+
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Incorrect password" });
+    }
+
+    // Optionally log location/device to attendance logs here
+
     return res.status(200).json({
-      needPasswordSetup: true,
-      message: "Password not set for this employee. Please set password first.",
-      email: employee.email,
-    });
-  }
-
-  const passwordMatch = await bcrypt.compare(password, employee.password);
-  if (!passwordMatch) {
-    return res.status(401).json({ error: "Incorrect password" });
-  }
-
-  // Time validation code unchanged...
-  const nowUTC = new Date();
-  const nowISTStr = nowUTC.toLocaleString("en-US", {
-    timeZone: "Asia/Kolkata",
-  });
-  const nowIST = new Date(nowISTStr);
-
-  const todayStr = nowIST.toISOString().split("T")[0];
-  const hour = nowIST.getHours();
-  const minute = nowIST.getMinutes();
-  const totalMinutes = hour * 60 + minute;
-
-  if (totalMinutes < 570) {
-    return res.status(403).json({
-      error: "Login not allowed before 9:30 AM IST",
-    });
-  }
-
-  // Log attendance unchanged
-  const alreadyLogged = attendance.find(
-    (a) => a.date === todayStr && a.email.toLowerCase() === email.toLowerCase()
-  );
-
-  if (!alreadyLogged) {
-    attendance.push({
-      name,
-      email,
-      number,
-      date: todayStr,
-      login: nowUTC.toISOString(),
-      istLoginTime: nowIST.toISOString(),
-      location: {
-        latitude: location?.latitude || null,
-        longitude: location?.longitude || null,
-        address: location?.address || "Unknown",
+      success: true,
+      message: "Login successful",
+      employee: {
+        name: matchedEmployee.name,
+        email: matchedEmployee.email,
+        number: matchedEmployee.number,
       },
-      device: device || null,
     });
-    writeJSON(attendanceFile, attendance);
+  } catch (err) {
+    console.error("Login error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
-
-  return res.status(200).json({
-    success: true,
-    employee: { name, email, number },
-  });
 }

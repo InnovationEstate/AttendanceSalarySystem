@@ -1,5 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
+import { db } from "../../lib/firebase";
+import { ref, get, child } from "firebase/database";
 import getAttendanceSummary, {
   getISTDateString,
 } from "../../utils/attendanceUtils";
@@ -26,8 +28,18 @@ export default function EmployeeAttendance() {
     setEmp(employee);
     setLoading(true);
 
-    const res = await fetch("/api/attendance/get");
-    const { data } = await res.json();
+    const dbRef = ref(db);
+    const snapshot = await get(child(dbRef, `attendance`));
+    if (!snapshot.exists()) {
+      setAttendanceData([]);
+      setLoading(false);
+      return;
+    }
+
+    const attendanceObj = snapshot.val();
+    const allEntries = Object.entries(attendanceObj).flatMap(([date, records]) =>
+      Object.values(records)
+    );
 
     const nowIST = new Date(
       new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
@@ -40,7 +52,7 @@ export default function EmployeeAttendance() {
     const today = isCurrentMonth ? nowIST.getDate() : 0;
 
     const summary = getAttendanceSummary(
-      data,
+      allEntries,
       targetMonth,
       currentYear,
       isCurrentMonth ? today : 31,
@@ -58,7 +70,7 @@ export default function EmployeeAttendance() {
     summary.detailedDays.forEach(({ day, status }) => {
       const dateStr = getISTDateString(currentYear, targetMonth, day);
 
-      const loginRecord = data.find(
+      const loginRecord = allEntries.find(
         (a) =>
           a.date === dateStr &&
           a.email.toLowerCase() === employee.email.toLowerCase()
@@ -99,99 +111,100 @@ export default function EmployeeAttendance() {
   if (loading || !emp)
     return <div className="text-center py-8">Loading...</div>;
 
- return (
-  <div className="max-w-3xl mx-auto p-3 sm:p-4 text-sm">
-    {/* 🔽 Title + Month Selector */}
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2 sm:gap-0">
-      <h1 className="text-lg sm:text-xl font-semibold">
-        Your Attendance –{" "}
-        {new Date(new Date().getFullYear(), selectedMonth ?? new Date().getMonth()).toLocaleString("default", {
-          month: "long",
-          year: "numeric",
-        })}
-      </h1>
+  return (
+    <div className="max-w-3xl mx-auto p-3 sm:p-4 text-sm">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2 sm:gap-0">
+        <h1 className="text-lg sm:text-xl font-semibold">
+          Your Attendance –{" "}
+          {new Date(
+            new Date().getFullYear(),
+            selectedMonth ?? new Date().getMonth()
+          ).toLocaleString("default", {
+            month: "long",
+            year: "numeric",
+          })}
+        </h1>
 
-      <select
-        onChange={handleMonthChange}
-        value={selectedMonth ?? ""}
-        className="border border-gray-300 px-2 py-1 rounded text-sm bg-white shadow-sm"
-      >
-        <option value="">Current Month</option>
-        {monthOptions.map(({ value, label }) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-    </div>
-
-    {/* 🔽 Calendar Grid */}
-    <div className="grid grid-cols-7 gap-1 mb-6">
-      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-        <div key={`header-${day}`} className="text-center font-medium py-1 text-xs">
-          {day}
-        </div>
-      ))}
-
-      {attendanceData.map(({ key, day, status, date, loginTime, isToday }) => (
-        <div
-          key={key}
-          className={`relative p-2 rounded text-center group text-xs sm:text-sm
-            ${day ? statusColor[status] : "bg-transparent"} 
-            ${isToday ? "ring-2 ring-blue-500" : ""}
-            ${day ? "text-white font-medium" : "text-transparent"}
-            h-10 sm:h-12 flex items-center justify-center`}
+        <select
+          onChange={handleMonthChange}
+          value={selectedMonth ?? ""}
+          className="border border-gray-300 px-2 py-1 rounded text-sm bg-white shadow-sm"
         >
-          {day}
-          {day && (
-            <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs p-2 rounded bottom-full mb-1 left-1/2 transform -translate-x-1/2 z-10 w-[140px] sm:w-[160px]">
-              <div className="font-bold border-b border-gray-600 pb-1">{date}</div>
-              <div className="flex justify-between mt-1">
-                <span>Status:</span>
-                <span className="font-semibold">{status}</span>
-              </div>
-              {loginTime && (
-                <div className="flex justify-between mt-1">
-                  <span>Time:</span>
-                  <span>
-                    {new Date(loginTime).toLocaleTimeString("en-IN", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      hour12: true,
-                      timeZone: "Asia/Kolkata",
-                    })}
-                  </span>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
+          <option value="">Current Month</option>
+          {monthOptions.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
 
-    {/* 🔽 Legend */}
-    <div className="mt-6 border-t pt-3 text-xs sm:text-sm">
-      <h3 className="font-semibold mb-2">Legend:</h3>
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-green-500" />
-          <span>Present</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-yellow-500" />
-          <span>Half Day</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-orange-500" />
-          <span>Leave</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-gray-400" />
-          <span>Week Off</span>
+      {/* Calendar Grid */}
+      <div className="grid grid-cols-7 gap-1 mb-6">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+          <div key={`header-${day}`} className="text-center font-medium py-1 text-xs">
+            {day}
+          </div>
+        ))}
+
+        {attendanceData.map(({ key, day, status, date, loginTime, isToday }) => (
+          <div
+            key={key}
+            className={`relative p-2 rounded text-center group text-xs sm:text-sm
+              ${day ? statusColor[status] : "bg-transparent"} 
+              ${isToday ? "ring-2 ring-blue-500" : ""}
+              ${day ? "text-white font-medium" : "text-transparent"}
+              h-10 sm:h-12 flex items-center justify-center`}
+          >
+            {day}
+            {day && (
+              <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs p-2 rounded bottom-full mb-1 left-1/2 transform -translate-x-1/2 z-10 w-[140px] sm:w-[160px]">
+                <div className="font-bold border-b border-gray-600 pb-1">{date}</div>
+                <div className="flex justify-between mt-1">
+                  <span>Status:</span>
+                  <span className="font-semibold">{status}</span>
+                </div>
+                {loginTime && (
+                  <div className="flex justify-between mt-1">
+                    <span>Time:</span>
+                    <span>
+                      {new Date(loginTime).toLocaleTimeString("en-IN", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                        hour12: true,
+                        timeZone: "Asia/Kolkata",
+                      })}
+                    </span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Legend */}
+      <div className="mt-6 border-t pt-3 text-xs sm:text-sm">
+        <h3 className="font-semibold mb-2">Legend:</h3>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-green-500" />
+            <span>Present</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-yellow-500" />
+            <span>Half Day</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-orange-500" />
+            <span>Leave</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-gray-400" />
+            <span>Week Off</span>
+          </div>
         </div>
       </div>
     </div>
-  </div>
-);
-
+  );
 }
