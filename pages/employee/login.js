@@ -41,20 +41,6 @@ export default function EmployeeLogin() {
     });
   };
 
-  const getAddressFromCoords = async ({ latitude, longitude }) => {
-    const response = await fetch(
-      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}`,
-      {
-        headers: {
-          "User-Agent":
-            "attendance-salary-tracker/1.0 (innovationestate.in@gmail.com)",
-        },
-      }
-    );
-    const data = await response.json();
-    return data.display_name || "Unknown location";
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
@@ -67,6 +53,8 @@ export default function EmployeeLogin() {
 
     try {
       const coords = await getLocation();
+
+      // Get address from your API or fallback to unknown
       const addressRes = await fetch("/api/geo/reverse", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -92,6 +80,13 @@ export default function EmployeeLogin() {
       });
 
       const data = await res.json();
+
+      if (data.needPasswordSetup) {
+        // Redirect to set-password with email query param
+        router.push(`/employee/set-password?email=${encodeURIComponent(data.email)}`);
+        return;
+      }
+
       if (!res.ok) throw new Error(data.error || "Login failed");
 
       localStorage.setItem("employee", JSON.stringify(data.employee));

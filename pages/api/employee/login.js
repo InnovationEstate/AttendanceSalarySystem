@@ -41,9 +41,14 @@ export default async function handler(req, res) {
     return res.status(401).json({ error: "Employee not registered" });
   }
 
-  // 🔐 Validate password
+  // 🔐 Check if password is set
   if (!employee.password) {
-    return res.status(403).json({ error: "Password not set for this employee." });
+    // Instead of error, tell frontend to redirect to set-password page
+    return res.status(200).json({
+      needPasswordSetup: true,
+      message: "Password not set for this employee. Please set password first.",
+      email: employee.email,
+    });
   }
 
   const passwordMatch = await bcrypt.compare(password, employee.password);
