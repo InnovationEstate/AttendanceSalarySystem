@@ -252,22 +252,22 @@ export default function EmployeeSalary() {
           <div>Per Day Salary:</div>
           <div className="font-semibold">₹ {perDaySalary.toFixed(2)}</div>
 
-          <div>
+          {/* <div>
             {selectedMonth === currentMonth ? "Gross Till Today:" : "Gross:"}
           </div>
           <div className="font-semibold text-green-600">
             ₹ {grossSalaryTillToday.toFixed(2)}
-          </div>
+          </div> */}
 
-          <div>Leave Days:</div>
+          <div> Total Leave:</div>
           <div className="text-red-600 font-semibold">{leave} (1 Paid)</div>
 
-          <div>Half Days:</div>
-          <div className="text-orange-600 font-semibold">{half} (1 Paid)</div>
 
           <div>Unpaid Leaves:</div>
           <div className="font-semibold text-red-700">{unpaidLeaves}</div>
 
+          <div>Half Days:</div>
+          <div className="text-orange-600 font-semibold">{half} </div>
           <div>Total Deduction:</div>
           <div className="font-semibold text-red-600">
             ₹ {totalDeduction.toFixed(2)}

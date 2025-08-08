@@ -1,9 +1,12 @@
+// Updated Admin Salary Page - Using Firebase Realtime Database
 "use client";
 
 import React, { useEffect, useState } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import getAttendanceSummary from "../../utils/attendanceUtils";
+import { getDatabase, ref, get, child } from "firebase/database";
+import { app } from "../../lib/firebase";
 
 export default function AdminSalary() {
   const [employees, setEmployees] = useState([]);
@@ -13,20 +16,36 @@ export default function AdminSalary() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
   useEffect(() => {
+    const db = getDatabase(app);
+    const dbRef = ref(db);
+
     async function fetchData() {
       try {
-        const empRes = await fetch("/api/employee/getEmployees");
-        const attRes = await fetch("/api/attendance/get");
+        const empSnap = await get(child(dbRef, "employees"));
+        const attSnap = await get(child(dbRef, "attendance"));
 
-        const empData = await empRes.json();
-        const attData = await attRes.json();
+        const empList = [];
+        empSnap.forEach((childSnap) => {
+          empList.push(childSnap.val());
+        });
 
-        setEmployees(empData || []);
-        setAttendance(attData.data || attData || []);
+        const attList = [];
+        if (attSnap.exists()) {
+          const attendanceData = attSnap.val();
+          Object.entries(attendanceData).forEach(([date, entry]) => {
+            Object.values(entry).forEach((record) => {
+              attList.push(record);
+            });
+          });
+        }
+
+        setEmployees(empList || []);
+        setAttendance(attList || []);
       } catch (err) {
-        console.error("Error fetching data:", err);
+        console.error("Firebase fetch error:", err);
       }
     }
+
     fetchData();
   }, []);
 
@@ -137,17 +156,7 @@ export default function AdminSalary() {
 
     autoTable(doc, {
       startY: 40,
-      head: [
-        [
-          "ID",
-          "Name",
-          "Email",
-          "Number",
-          "Monthly Salary",
-          "Total Deduction",
-          "Net Salary",
-        ],
-      ],
+      head: [["ID", "Name", "Email", "Number", "Monthly Salary", "Total Deduction", "Net Salary"]],
       body: tableData,
       theme: "striped",
       styles: { fontSize: 10 },
@@ -171,11 +180,10 @@ export default function AdminSalary() {
 
   return (
     <main className="p-4 sm:p-6 bg-gray-100 min-h-screen text-sm md:text-base">
-      {/* Header */}
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
         <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-gray-800">
-            Salary -{" "}
+            Salary -
             <span className="font-bold text-black">
               {new Date(selectedYear, selectedMonth).toLocaleString("default", {
                 month: "long",
@@ -220,7 +228,6 @@ export default function AdminSalary() {
         Total Net Salary: ₹{totalNetSalary.toFixed(2)}
       </div>
 
-      {/* Table */}
       <div className="overflow-x-auto rounded shadow">
         <table className="min-w-full bg-white border text-sm md:text-base">
           <thead className="bg-blue-100 sticky top-0 z-10">

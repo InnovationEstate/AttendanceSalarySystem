@@ -1,38 +1,43 @@
 "use client";
 import { useEffect, useState } from "react";
+import { db } from "@/lib/firebase";
+import { ref, onValue, update, get } from "firebase/database";
 
 export default function ManageLeaves() {
   const [requests, setRequests] = useState([]);
   const [employees, setEmployees] = useState([]);
 
   useEffect(() => {
-    // Fetch leave requests
-    fetch("/api/leave/list")
-      .then(res => res.json())
-      .then(data => setRequests(data));
+    // Fetch leave requests from Firebase
+    const leaveRef = ref(db, "leaveRequests");
+    onValue(leaveRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const formatted = Object.entries(data).map(([id, value]) => ({ id, ...value }));
+      setRequests(formatted);
+    });
 
-    // Fetch employee list
-    fetch("/api/employee/getEmployees")
-      .then(res => res.json())
-      .then(data => setEmployees(data));
+    // Fetch employees from Firebase
+    const empRef = ref(db, "employees");
+    onValue(empRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const formatted = Object.entries(data).map(([id, value]) => ({ id, ...value }));
+      setEmployees(formatted);
+    });
   }, []);
 
   const handleUpdate = async (id, status) => {
-    await fetch("/api/leave/update", {
-      method: "POST",
-      body: JSON.stringify({ id, status }),
-    });
+    const requestRef = ref(db, `leaveRequests/${id}`);
+    await update(requestRef, { status });
 
     setRequests((prev) =>
       prev.map((r) => (r.id === id ? { ...r, status } : r))
     );
   };
 
-  // Utility to find employee info by email
   const getEmployeeInfo = (email) => {
     const emp = employees.find((e) => e.email === email);
     if (!emp) return { id: "Unknown", name: "Unknown" };
-    return { id: emp.id, name: emp.name };
+    return { id: emp.id || "Unknown", name: emp.name || "Unknown" };
   };
 
   return (
@@ -43,7 +48,7 @@ export default function ManageLeaves() {
         return (
           <div key={req.id} className="border p-4 rounded mb-4">
             <p>
-              <strong>{id} - {name}</strong> applied for leave on{" "}
+              <strong>{id} - {name}</strong> applied for leave on {" "}
               <strong>{req.date}</strong>
             </p>
             <p className="text-sm italic mb-2">{req.reason}</p>
@@ -64,8 +69,7 @@ export default function ManageLeaves() {
               </div>
             ) : (
               <p>
-                Status:{" "}
-                <strong className="capitalize">{req.status}</strong>
+                Status: <strong className="capitalize">{req.status}</strong>
               </p>
             )}
           </div>

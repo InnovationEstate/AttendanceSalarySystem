@@ -74,7 +74,7 @@ export default function getAttendanceSummary(
     // Filter attendance records for employee and date
     const record = attendanceData.find(
       (a) =>
-        a.email.toLowerCase() === employeeEmail.toLowerCase() && a.date === dateStr
+         a.email && a.email.toLowerCase() === employeeEmail.toLowerCase() && a.date === dateStr
     );
 
     if (!record) {

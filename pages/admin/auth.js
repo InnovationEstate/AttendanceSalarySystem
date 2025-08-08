@@ -8,20 +8,32 @@ export default function AdminAuth() {
   const [error, setError] = useState("");
   const router = useRouter();
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const correctPassword = process.env.NEXT_PUBLIC_ADMIN_PASSWORD;
 
-    if (password === correctPassword) {
-      sessionStorage.setItem("isAdmin", "true");
-      router.push("/admin/dashboard");
-    } else {
-      setError("Incorrect password");
+    try {
+      const res = await fetch("/api/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await res.json();
+
+      if (res.ok) {
+        sessionStorage.setItem("isAdmin", "true");
+        router.push("/admin/dashboard");
+      } else {
+        setError(data.message || "Login failed");
+      }
+    } catch (err) {
+      console.error(err);
+      setError("Something went wrong");
     }
   };
 
   return (
-    <div className=" flex items-center justify-center bg-gray-100 px-4">
+    <div className="flex items-center justify-center bg-gray-100 px-4 ">
       <form onSubmit={handleSubmit} className="bg-white p-6 rounded shadow-md w-full max-w-md">
         <h2 className="text-xl font-semibold mb-4">Admin Access</h2>
         <input

@@ -1,13 +1,12 @@
+//pages
 import bcrypt from "bcryptjs";
 import formidable from "formidable";
-import { db, bucket } from "../../../lib/firebaseAdmin"; // your admin SDK imports
+import { db, bucket } from "../../../lib/firebaseAdmin";
 import path from "path";
-import fs from "fs";
+import fs from "fs/promises"; // Use promises version
 
 export const config = {
-  api: {
-    bodyParser: false,
-  },
+  api: { bodyParser: false },
 };
 
 const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
@@ -18,7 +17,7 @@ export default async function handler(req, res) {
   }
 
   const form = new formidable.IncomingForm({ multiples: true });
-  
+
   form.parse(req, async (err, fields, files) => {
     if (err) {
       console.error("Form parse error:", err);
@@ -33,70 +32,72 @@ export default async function handler(req, res) {
     if (!strongPassword.test(password)) {
       return res.status(400).json({
         error:
-          "Password must be 8 characters long and include uppercase, lowercase, number, and special character.",
+          "Password must be 8+ characters with uppercase, lowercase, number, and special character.",
       });
     }
 
     try {
-      // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
-
-      // Fetch existing record from Firebase DB
       const docRef = db.ref(`documents/${employeeId}`);
       const snapshot = await docRef.once("value");
       const existingRecord = snapshot.val() || { files: {} };
       const existingFiles = existingRecord.files || {};
 
-      // Upload new files to Firebase Storage
+      // Only hash password if new user
+      let passwordToSave = existingRecord?.hashedPassword;
+      if (!passwordToSave) {
+        passwordToSave = await bcrypt.hash(password, 10);
+      } else {
+        // Optional: verify password here if required
+      }
+
       const uploadedFiles = {};
 
       for (const key in files) {
-        const file = files[key];
-        // formidable returns an array only if multiples true, else object
-        // so normalize:
-        const fileObj = Array.isArray(file) ? file[0] : file;
-
-        const ext = path.extname(fileObj.originalFilename);
+        const file = Array.isArray(files[key]) ? files[key][0] : files[key];
+        const ext = path.extname(file.originalFilename);
+        const safeExt = ext || ".dat"; // fallback if ext missing
         const timestamp = Date.now();
-        const filename = `${employeeId}_${key}_${timestamp}${ext}`;
-
-        // Upload path in Storage
+        const rawFilename = `${employeeId}_${key}_${timestamp}${safeExt}`;
+        const filename = rawFilename.replace(/[^a-zA-Z0-9_.-]/g, "_");
         const firebaseStoragePath = `documents/${employeeId}/${filename}`;
 
-        // Upload file to Firebase Storage
-        await bucket.upload(fileObj.filepath, {
+        // Upload to Firebase Storage
+        await bucket.upload(file.filepath, {
           destination: firebaseStoragePath,
           metadata: {
-            contentType: fileObj.mimetype,
+            contentType: file.mimetype || "application/octet-stream",
           },
         });
 
+        // Save file info
         uploadedFiles[key] = filename;
 
-        // Delete local temp file after upload
-        fs.unlink(fileObj.filepath, (unlinkErr) => {
-          if (unlinkErr) console.warn("Failed to delete temp file:", unlinkErr);
-        });
+        // Delete local temp file
+        try {
+          await fs.unlink(file.filepath);
+        } catch (unlinkErr) {
+          console.warn("Failed to delete temp file:", unlinkErr);
+        }
 
-        // Optional: Delete old file from Firebase Storage if replaced
+        // Optional: delete old file
         if (existingFiles[key]) {
           try {
             const oldFile = bucket.file(`documents/${employeeId}/${existingFiles[key]}`);
             await oldFile.delete();
           } catch (delErr) {
-            console.warn("Failed to delete old file from storage:", delErr);
+            console.warn("Failed to delete old file:", delErr.message);
           }
         }
       }
 
-      // Merge new and existing files metadata
       const updatedFiles = { ...existingFiles, ...uploadedFiles };
 
-      // Save record back to Firebase Realtime Database
-      await docRef.set({
-        hashedPassword,
-        files: updatedFiles,
-      });
+     await docRef.update({
+  employeeId,
+  hashedPassword: passwordToSave,
+  files: updatedFiles,
+});
+
 
       return res.status(200).json({ success: true });
     } catch (uploadErr) {

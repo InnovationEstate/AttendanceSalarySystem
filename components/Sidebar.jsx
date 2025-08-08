@@ -21,6 +21,7 @@ const adminNavItems = [
   { name: 'Salary', href: '/admin/salary', icon: <IndianRupee className="w-5 h-5" /> },
   { name: 'Documents', href: '/admin/documents', icon: <FileTextIcon className="w-5 h-5" /> },
   { name: 'Leave Requests', href: '/admin/ManageLeaves', icon: <CalendarCheck className="w-5 h-5" /> },
+  { name: 'Company Holidays', href: '/admin/companyHolidays', icon: <CalendarCheck className="w-5 h-5" /> },
 ]
 
 const employeeNavItems = [
@@ -67,7 +68,7 @@ export default function Sidebar({ role }) {
       {/* Sidebar */}
       <aside
         className={`
-          fixed top-0 left-0 h-screen w-64 bg-blue-600 p-6 z-50 flex flex-col
+          fixed top-0 left-0 h-screen w-64 bg-blue-600 p-4 z-50 flex flex-col
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
           sm:translate-x-0 sm:static

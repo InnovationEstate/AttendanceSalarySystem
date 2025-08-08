@@ -1,16 +1,28 @@
 "use client";
 
 import { useState } from "react";
+import { uploadBytesResumable } from "firebase/storage";
+
 import {
   db,
   storage,
-} from "../../lib/firebase"; // Your Firebase client exports: initialized Realtime DB & Storage
-import { ref as dbRef, get, update } from "firebase/database";
+} from "../../lib/firebase";
+
+import {
+  get,
+  update,
+  ref as dbRef,
+  query,
+  orderByChild,
+  equalTo,
+} from "firebase/database";
+
 import {
   ref as storageRef,
   uploadBytes,
   getDownloadURL,
 } from "firebase/storage";
+
 
 const requiredDocs = ["aadhar", "pan", "bank", "photo"];
 const optionalDocs = ["experience"];
@@ -84,144 +96,198 @@ export default function EmployeeDocuments() {
   };
 
   // Fetch existing document metadata from Firebase Realtime Database
-  const fetchExistingDocs = async (empId) => {
-    setLoading(true);
-    try {
-      const snapshot = await get(dbRef(db, `documents/${empId}`));
-      if (snapshot.exists()) {
-        setExistingDocs(snapshot.val().files || {});
+ const fetchExistingDocs = async (empId) => {
+  console.log("Fetching existing documents for:", empId);
+  setLoading(true);
+
+  try {
+    // Defensive check
+    if (!empId) {
+      throw new Error("Employee ID is required");
+    }
+
+    // Build query to fetch document where employeeId === empId
+    const q = query(
+      dbRef(db, "documents"),
+      orderByChild("employeeId"),
+      equalTo(empId)
+    );
+
+    console.log("Query built:", q);
+
+    const snapshot = await get(q);
+
+    console.log("Snapshot received:", snapshot);
+
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      console.log("Snapshot data:", data);
+
+      const firstMatchKey = Object.keys(data)[0];
+      console.log("First matching key:", firstMatchKey);
+
+      if (firstMatchKey) {
+        const employeeRecord = data[firstMatchKey];
+        console.log("Employee record found:", employeeRecord);
+        setExistingDocs(employeeRecord.files || {});
       } else {
+        console.log("No matching key found, setting empty docs");
         setExistingDocs({});
       }
-    } catch (error) {
-      setMessage("Failed to fetch existing documents: " + error.message);
+    } else {
+      console.log("Snapshot does not exist, setting empty docs");
       setExistingDocs({});
-    } finally {
-      setLoading(false);
     }
-  };
+  } catch (error) {
+    console.error("Error fetching documents:", error);
+    setMessage("Failed to fetch existing documents: " + error.message);
+    setExistingDocs({});
+  } finally {
+    setLoading(false);
+    console.log("Loading set to false");
+  }
+};
+
 
   // Upload files to Firebase Storage and update metadata in Realtime Database
   const uploadDocuments = async (useNewPassword = false) => {
-    setMessage("");
-    if (!employeeId) {
-      setMessage("Employee ID is required");
+  setMessage("");
+  if (!employeeId) {
+    setMessage("Employee ID is required");
+    return;
+  }
+
+  if (useNewPassword) {
+    if (!newPassword) {
+      setMessage("Please enter a new password");
       return;
     }
+    if (!isStrongPassword(newPassword)) {
+      setMessage(
+        "Password must be 8+ characters with uppercase, lowercase, number, and special character"
+      );
+      return;
+    }
+  } else {
+    if (!password) {
+      setMessage("Please enter password");
+      return;
+    }
+  }
+    
+  console.log("Uploading documents for employee:", employeeId);
+  // Check all required docs are selected
+  for (const doc of requiredDocs) {
+    if (!docs[doc] && !existingDocs[doc]) {
+      setMessage(`Please upload required document: ${doc}`);
+      return;
+    }
+  }
 
-    if (useNewPassword) {
-      if (!newPassword) {
-        setMessage("Please enter a new password");
-        return;
-      }
-      if (!isStrongPassword(newPassword)) {
-        setMessage(
-          "Password must be 8+ characters with uppercase, lowercase, number, and special character"
+  setLoading(true);
+  try {
+    const uploadedFiles = { ...existingDocs };
+
+    for (const key of Object.keys(docs)) {
+      const file = docs[key];
+      if (!file) continue;
+
+      const fileExt = file.name.split(".").pop();
+      const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
+      const storagePath = `documents/${employeeId}/${key}_${Date.now()}.${fileExt}`;
+      const fileRef = storageRef(storage, storagePath);
+
+      const uploadTask = uploadBytesResumable(fileRef, file);
+
+      await new Promise((resolve, reject) => {
+        uploadTask.on(
+          "state_changed",
+          null,
+          (error) => {
+            console.error("Upload error:", error);
+            reject(error);
+          },
+          () => {
+            // Success
+            uploadedFiles[key] = {
+              name: storagePath,
+              originalName: safeName,
+            };
+            resolve();
+          }
         );
-        return;
-      }
-    } else {
-      if (!password) {
-        setMessage("Please enter password");
-        return;
-      }
+      });
     }
 
-    // Check all required docs are selected
-    for (const doc of requiredDocs) {
-      if (!docs[doc] && !existingDocs[doc]) {
-        setMessage(`Please upload required document: ${doc}`);
-        return;
-      }
-    }
-
-    setLoading(true);
-    try {
-      // Upload files to Storage
-      const uploadedFiles = { ...existingDocs };
-
+    // Call backend API if password is new
+    if (useNewPassword) {
+      const formData = new FormData();
+      formData.append("employeeId", employeeId);
+      formData.append("password", newPassword);
       for (const key of Object.keys(docs)) {
-        const file = docs[key];
-        if (!file) continue;
-
-        const fileExt = file.name.split(".").pop();
-        const storagePath = `documents/${employeeId}/${key}_${Date.now()}.${fileExt}`;
-        const fileRef = storageRef(storage, storagePath);
-
-        await uploadBytes(fileRef, file);
-
-        // Save just the storage path or filename to DB metadata
-        uploadedFiles[key] = {
-          name: storagePath,
-          originalName: file.name,
-        };
-      }
-
-      // Update metadata in Realtime Database
-      const docRef = dbRef(db, `documents/${employeeId}`);
-
-      // If new user, include password for backend to hash later (or call your API)
-      // But since we can't hash client-side securely, call an API to set password here:
-      if (useNewPassword) {
-        const resp = await fetch("/api/documents/create-password-and-upload", {
-          method: "POST",
-          body: (() => {
-            const formData = new FormData();
-            formData.append("employeeId", employeeId);
-            formData.append("password", newPassword);
-            // Append files to formData for server upload
-            for (const key of Object.keys(docs)) {
-              formData.append(key, docs[key]);
-            }
-            return formData;
-          })(),
-        });
-
-        if (!resp.ok) {
-          const err = await resp.json();
-          throw new Error(err.error || "Failed to create password and upload");
+        if (docs[key]) {
+          formData.append(key, docs[key]);
         }
-        setIsNewUser(false);
-        setVerified(true);
-        setPassword(newPassword);
-        setMessage("Password set and documents uploaded successfully");
-        await fetchExistingDocs(employeeId);
-      } else {
-        // Existing user: just update files metadata in DB
-        await update(docRef, { files: uploadedFiles });
-        setMessage("Documents uploaded successfully");
-        await fetchExistingDocs(employeeId);
       }
 
-      setDocs({});
-    } catch (error) {
-      setMessage("Upload failed: " + error.message);
-    } finally {
-      setLoading(false);
+      const resp = await fetch("/api/documents/create-password-and-upload", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json();
+        throw new Error(err.error || "Failed to create password and upload");
+      }
+
+      setIsNewUser(false);
+      setVerified(true);
+      setPassword(newPassword);
+      setMessage("Password set and documents uploaded successfully");
+    } else {
+      // Existing user: update DB metadata
+      const docRef = dbRef(db, `documents/${employeeId}`);
+      await update(docRef, { files: uploadedFiles });
+      setMessage("Documents uploaded successfully");
     }
-  };
+
+    setDocs({});
+    await fetchExistingDocs(employeeId);
+  } catch (error) {
+    console.error("Upload failed:", error);
+    setMessage("Upload failed: " + error.message);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // View document by fetching download URL from Firebase Storage
   const viewDocument = async (docKey) => {
-    if (!employeeId) {
-      alert("Missing Employee ID");
-      return;
-    }
+  if (!employeeId) {
+    alert("Missing Employee ID");
+    return;
+  }
 
-    const fileMeta = existingDocs[docKey];
-    if (!fileMeta) {
-      alert("No file available for this document.");
-      return;
-    }
+  const fileMeta = existingDocs[docKey];
+  if (!fileMeta || !fileMeta.name) {
+    alert("No file available for this document.");
+    return;
+  }
 
-    try {
-      const fileRef = storageRef(storage, fileMeta.name);
-      const url = await getDownloadURL(fileRef);
-      window.open(url, "_blank");
-    } catch (error) {
-      alert("Error fetching document: " + error.message);
-    }
-  };
+  try {
+    // Construct a non-root path reference (folder + filename)
+    const fileRef = storageRef(storage, `uploads-private/${fileMeta.name}`);
+
+    // Get downloadable URL
+    const url = await getDownloadURL(fileRef);
+
+    // Open the file in a new browser tab
+    window.open(url, "_blank");
+  } catch (error) {
+    alert("Error fetching document: " + error.message);
+    console.error("Firebase Storage error:", error);
+  }
+};
 
   return (
     <div className="bg-gray-50 flex justify-center items-center p-4 min-h-screen">
