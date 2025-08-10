@@ -1,7 +1,14 @@
-// pages/api/documents/verify.js
-
 import bcrypt from "bcryptjs";
-import { db ,storage} from "../../../lib/firebaseAdmin";
+import admin from "firebase-admin";
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    databaseURL: process.env.FIREBASE_DATABASE_URL,
+  });
+}
+
+const db = admin.database();
 
 const dummyHash = "$2a$10$zV9M9pN8rNd9xGgmZP/jMezW/MkgV4EfZ5t06EKc6Eq19VJhvEi32"; // Prevent timing attacks
 
@@ -24,7 +31,8 @@ export default async function handler(req, res) {
     const employeeRecord = snapshot.val();
 
     if (!employeeRecord) {
-      await bcrypt.compare(password, dummyHash); // prevent timing attack
+      // To prevent timing attacks always compare with dummy hash
+      await bcrypt.compare(password, dummyHash);
       return res.status(404).json({
         error: "Employee not registered yet. Please create your password first.",
       });

@@ -1,70 +1,51 @@
-import { getStorage } from "firebase-admin/storage";
-import { db } from "../../../lib/firebaseAdmin";
 import bcrypt from "bcryptjs";
+import { db, bucket } from "../../../lib/firebaseAdmin";
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
 
+  const { employeeId, password, docKey, isAdmin } = req.body;
 
-
-  const { employeeId, password } = req.body;
-
-  if (!employeeId || !password) {
-    return res.status(400).json({ error: "Missing employeeId or password" });
+  if (!employeeId || !docKey) {
+    return res.status(400).json({ error: "Missing employeeId or docKey" });
   }
 
   try {
-    // Step 1: Get all documents and find matching employeeId
-    const snapshot = await db.ref("documents").once("value");
-    const allRecords = snapshot.val();
-
-    const matchedKey = Object.keys(allRecords || {}).find(
-      key => allRecords[key].employeeId === employeeId.trim()
-    );
-    const employeeRecord = matchedKey ? allRecords[matchedKey] : null;
+    const snapshot = await db.ref(`documents/${employeeId}`).once("value");
+    const employeeRecord = snapshot.val();
 
     if (!employeeRecord) {
-      return res.status(404).json({ error: "Employee not found" });
+      return res.status(404).json({ error: "Employee record not found" });
     }
 
-    // Step 2: Check password
-    const isMatch = await bcrypt.compare(password, employeeRecord.hashedPassword);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Incorrect password" });
-    }
-
-    // Step 3: Generate signed URLs for each uploaded file
-    const storage = getStorage();
-    const bucket = storage.bucket();
-
-    const files = employeeRecord.files || {};
-    const urls = {};
-
-    for (const [key, filename] of Object.entries(files)) {
-      const file = bucket.file(`documents/${filename}`);
-      const [exists] = await file.exists();
-
-      if (!exists) {
-        urls[key] = null; // File listed in DB but missing in storage
-        continue;
+    if (!isAdmin) {
+      if (!password) {
+        return res.status(400).json({ error: "Password required" });
       }
-
-      const [url] = await file.getSignedUrl({
-        action: "read",
-        expires: Date.now() + 15 * 60 * 1000, // 15 minutes
-      });
-
-      urls[key] = url;
+      const match = await bcrypt.compare(password, employeeRecord.hashedPassword);
+      if (!match) {
+        return res.status(401).json({ error: "Incorrect password" });
+      }
     }
 
-    return res.status(200).json({
-      success: true,
-      urls, // { aadhar: '...', pan: '...', bank: '...', photo: '...' }
-    });
+    const fileData = employeeRecord.files?.[docKey];
+    if (!fileData || !fileData.name) {
+      return res.status(404).json({ error: "File not found or missing storage path" });
+    }
+
+    const storagePath = fileData.name;
+
+    const [url] = await bucket.file(storagePath).getSignedUrl({
+  action: "read",
+  expires: Date.now() + 60 * 60 * 1000,
+});
+
+
+    return res.status(200).json({ success: true, url });
   } catch (error) {
-    console.error("❌ Error serving documents:", error);
+    console.error("❌ Error serving document:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }

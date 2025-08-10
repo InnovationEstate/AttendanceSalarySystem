@@ -1,108 +1,80 @@
-//pages
 import bcrypt from "bcryptjs";
-import formidable from "formidable";
-import { db, bucket } from "../../../lib/firebaseAdmin";
-import path from "path";
-import fs from "fs/promises"; // Use promises version
+import admin from "firebase-admin";
+
+if (!admin.apps.length) {
+  admin.initializeApp({
+    credential: admin.credential.applicationDefault(),
+    databaseURL: process.env.FIREBASE_DATABASE_URL,
+  });
+}
+
+const db = admin.database();
 
 export const config = {
-  api: { bodyParser: false },
+  api: {
+    bodyParser: true, // Enable default body parsing for JSON form data
+  },
 };
-
-const strongPassword = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const form = new formidable.IncomingForm({ multiples: true });
+  try {
+    const { employeeId, password, files } = req.body;
 
-  form.parse(req, async (err, fields, files) => {
-    if (err) {
-      console.error("Form parse error:", err);
-      return res.status(500).json({ error: "Form parsing failed" });
+    if (
+      !employeeId || typeof employeeId !== "string" ||
+      !password || typeof password !== "string"
+    ) {
+      return res.status(400).json({ error: "Employee ID and password are required" });
     }
 
-    const { employeeId, password } = fields;
-    if (!employeeId || !password) {
-      return res.status(400).json({ error: "Missing employeeId or password" });
-    }
+    // `files` should be JSON object containing file metadata, e.g.:
+    // { aadhar: { name: "documents/emp1/aadhar_12345.pdf", originalName: "aadhar.pdf" }, ... }
+    const filesMetadata = typeof files === "string" ? JSON.parse(files) : files || {};
 
-    if (!strongPassword.test(password)) {
-      return res.status(400).json({
-        error:
-          "Password must be 8+ characters with uppercase, lowercase, number, and special character.",
-      });
-    }
+    // Fetch existing record
+    const docRef = db.ref(`documents/${employeeId}`);
+    const snapshot = await docRef.once("value");
+    const existingRecord = snapshot.val() || {};
 
-    try {
-      const docRef = db.ref(`documents/${employeeId}`);
-      const snapshot = await docRef.once("value");
-      const existingRecord = snapshot.val() || { files: {} };
-      const existingFiles = existingRecord.files || {};
+    let hashedPassword = existingRecord.hashedPassword;
+    const isNewUser = !hashedPassword;
 
-      // Only hash password if new user
-      let passwordToSave = existingRecord?.hashedPassword;
-      if (!passwordToSave) {
-        passwordToSave = await bcrypt.hash(password, 10);
-      } else {
-        // Optional: verify password here if required
+    if (isNewUser) {
+      hashedPassword = await bcrypt.hash(password, 10);
+    } else {
+      const match = await bcrypt.compare(password, hashedPassword);
+      if (!match) {
+        return res.status(403).json({ error: "Incorrect password" });
       }
-
-      const uploadedFiles = {};
-
-      for (const key in files) {
-        const file = Array.isArray(files[key]) ? files[key][0] : files[key];
-        const ext = path.extname(file.originalFilename);
-        const safeExt = ext || ".dat"; // fallback if ext missing
-        const timestamp = Date.now();
-        const rawFilename = `${employeeId}_${key}_${timestamp}${safeExt}`;
-        const filename = rawFilename.replace(/[^a-zA-Z0-9_.-]/g, "_");
-        const firebaseStoragePath = `documents/${employeeId}/${filename}`;
-
-        // Upload to Firebase Storage
-        await bucket.upload(file.filepath, {
-          destination: firebaseStoragePath,
-          metadata: {
-            contentType: file.mimetype || "application/octet-stream",
-          },
-        });
-
-        // Save file info
-        uploadedFiles[key] = filename;
-
-        // Delete local temp file
-        try {
-          await fs.unlink(file.filepath);
-        } catch (unlinkErr) {
-          console.warn("Failed to delete temp file:", unlinkErr);
-        }
-
-        // Optional: delete old file
-        if (existingFiles[key]) {
-          try {
-            const oldFile = bucket.file(`documents/${employeeId}/${existingFiles[key]}`);
-            await oldFile.delete();
-          } catch (delErr) {
-            console.warn("Failed to delete old file:", delErr.message);
-          }
-        }
-      }
-
-      const updatedFiles = { ...existingFiles, ...uploadedFiles };
-
-     await docRef.update({
-  employeeId,
-  hashedPassword: passwordToSave,
-  files: updatedFiles,
-});
-
-
-      return res.status(200).json({ success: true });
-    } catch (uploadErr) {
-      console.error("Upload error:", uploadErr);
-      return res.status(500).json({ error: "Failed to upload files and save metadata" });
     }
-  });
+
+    // Merge existing files with new files metadata sent by client
+    const updatedFiles = {
+      ...(existingRecord.files || {}),
+      ...filesMetadata,
+    };
+
+    await docRef.set({
+      employeeId,
+      hashedPassword,
+      files: updatedFiles,
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: isNewUser
+        ? "Password set and documents metadata saved successfully"
+        : "Documents metadata updated successfully",
+      files: updatedFiles,
+      isNewUser,
+    });
+
+  } catch (err) {
+    console.error("Upload API error:", err);
+    return res.status(500).json({ error: "Internal server error", details: err.message });
+  }
 }

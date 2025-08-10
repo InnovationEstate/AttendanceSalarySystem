@@ -1,45 +1,39 @@
-import bcrypt from "bcryptjs";
-import { db } from "../../../lib/firebaseAdmin";
-
+import { db, storage } from "../../../lib/firebaseAdmin"; // storage initialized from admin SDK
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Method Not Allowed" });
   }
-   
 
-  const { employeeId, password } = req.body;
+  const { employeeId, docKey, isAdmin } = req.body;
 
-  if (!employeeId || !password) {
-    return res.status(400).json({ error: "Missing employeeId or password" });
+  if (!employeeId || !docKey) {
+    return res.status(400).json({ error: "Missing employeeId or docKey" });
   }
 
   try {
-    // Read all records from "documents"
-    const snapshot = await db.ref("documents").once("value");
-    const allRecords = snapshot.val();
+    // Get the file record from DB
+    const snapshot = await db
+      .ref(`documents/${employeeId}/files/${docKey}`)
+      .once("value");
+    const fileData = snapshot.val();
 
-    // Find the record where employeeId matches
-    const matchedKey = Object.keys(allRecords || {}).find(
-      key => allRecords[key].employeeId === employeeId.trim()
-    );
-
-    const employeeRecord = matchedKey ? allRecords[matchedKey] : null;
-
-    if (!employeeRecord) {
-      return res.status(404).json({ error: "Employee record not found" });
+    if (!fileData || !fileData.path) {
+      return res.status(404).json({ error: "File not found in database" });
     }
 
-    // Check password
-    const match = await bcrypt.compare(password, employeeRecord.hashedPassword);
-    if (!match) {
-      return res.status(401).json({ error: "Incorrect password" });
-    }
+    // Generate signed URL from Storage
+    const [url] = await storage
+      .bucket()
+      .file(fileData.path) // fileData.path should be the exact storage path like `documents/EMP001/aadhar.pdf`
+      .getSignedUrl({
+        action: "read",
+        expires: Date.now() + 60 * 60 * 1000, // 1 hour expiry
+      });
 
-    // Return only files (no storage URLs here, just file names)
-    return res.status(200).json({ files: employeeRecord.files || {} });
+    return res.status(200).json({ success: true, url });
   } catch (error) {
-    console.error("❌ Error fetching document metadata:", error);
+    console.error("Error fetching file URL:", error);
     return res.status(500).json({ error: "Internal Server Error" });
   }
 }
