@@ -82,7 +82,7 @@ export default function App({ Component, pageProps }) {
       {/* Main content beside Sidebar */}
       <div className="flex flex-col flex-1 h-screen overflow-hidden pl-0 bg-gray-50">
         {/* Header */}
-        <header className="bg-blue-700 text-white p-4 flex items-center justify-center sm:justify-start shadow">
+        <header className="top-0 sticky bg-blue-700 text-white p-4 flex items-center justify-center sm:justify-start shadow">
           <h1 className="text-xl font-bold pl-5">Attendance & Salary System</h1>
         </header>
 
@@ -92,7 +92,7 @@ export default function App({ Component, pageProps }) {
         </main>
 
         {/* Footer */}
-        <footer className="bg-gray-200 text-center text-sm text-gray-600 p-4">
+        <footer className=" bottom-0 sticky bg-gray-200 text-center text-sm text-gray-600 p-4">
           &copy; 2025 Innovation Estate. All rights reserved.
         </footer>
       </div>

@@ -1,13 +1,10 @@
-// pages/employee/login.js
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 export default function EmployeeLogin() {
   const [form, setForm] = useState({
-    name: "",
     email: "",
-    number: "",
     password: "",
   });
   const [error, setError] = useState(null);
@@ -42,101 +39,79 @@ export default function EmployeeLogin() {
     });
   };
 
- const handleSubmit = async (e) => {
-  e.preventDefault();
-  setError(null);
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setError(null);
 
-  const { name, email, number, password } = form;
-  if (!name || !email || !number || !password) {
-    setError("All fields including password are required.");
-    return;
-  }
-
-  try {
-    const coords = await getLocation();
-
-    const addressRes = await fetch("/api/geo/reverse", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(coords),
-    });
-    const { address } = await addressRes.json();
-
-    const res = await fetch("/api/employee/login", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name,
-        email,
-        number,
-        password,       // include password for login API
-        location: {
-          latitude: coords.latitude,
-          longitude: coords.longitude,
-          address,
-        },
-        device: navigator.userAgent,
-      }),
-    });
-
-    const data = await res.json();
-    console.log("Login response:", data);
-
-    if (data.needPasswordSetup) {
-      router.push(`/employee/set-password?email=${encodeURIComponent(data.email)}`);
+    const { email, password } = form;
+    if (!email || !password) {
+      setError("Email and password are required.");
       return;
     }
 
-    if (!res.ok) throw new Error(data.error || "Login failed");
+    try {
+      const coords = await getLocation();
 
-    // Save employee info including password in localStorage
-    localStorage.setItem("employee", JSON.stringify({
-      name: data.employee.name,
-      email: data.employee.email,
-      number: data.employee.number,
-      password: password,  // save the password user entered
-    }));
+      const addressRes = await fetch("/api/geo/reverse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(coords),
+      });
+      const { address } = await addressRes.json();
 
-    router.push("/employee/attendance");
-  } catch (err) {
-    setError(err.message || "Login failed");
-  }
-};
+      const res = await fetch("/api/employee/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email,
+          password,
+          location: {
+            latitude: coords.latitude,
+            longitude: coords.longitude,
+            address,
+          },
+          device: navigator.userAgent,
+        }),
+      });
 
+      const data = await res.json();
+      console.log("Login response:", data);
 
+      if (data.needPasswordSetup) {
+        router.push(`/employee/set-password?email=${encodeURIComponent(data.email)}`);
+        return;
+      }
+
+      if (!res.ok) throw new Error(data.error || "Login failed");
+
+      // Save employee info in localStorage (do NOT save password here)
+      localStorage.setItem(
+        "employee",
+        JSON.stringify({
+          name: data.employee.name,
+          email: data.employee.email,
+          number: data.employee.number,
+        })
+      );
+
+      router.push("/employee/attendance");
+    } catch (err) {
+      setError(err.message || "Login failed");
+    }
+  };
 
   return (
     <div className="max-w-md mx-auto p-6 mt-10 border rounded shadow bg-white">
-      <h2 className="text-2xl mb-6 text-center font-semibold">
-        Employee Login
-      </h2>
+      <h2 className="text-2xl mb-6 text-center font-semibold">Employee Login</h2>
       {error && (
         <div className="mb-4 text-red-600 bg-red-100 p-2 rounded">{error}</div>
       )}
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <input
-          type="text"
-          name="name"
-          placeholder="Full Name"
-          value={form.name}
-          onChange={handleChange}
-          className="p-2 border rounded"
-          required
-        />
-        <input
           type="email"
           name="email"
           placeholder="Email Address"
           value={form.email}
-          onChange={handleChange}
-          className="p-2 border rounded"
-          required
-        />
-        <input
-          type="tel"
-          name="number"
-          placeholder="Phone Number"
-          value={form.number}
           onChange={handleChange}
           className="p-2 border rounded"
           required
