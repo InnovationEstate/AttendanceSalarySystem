@@ -4,27 +4,39 @@ import { ref, get } from "firebase/database";
 
 export default async function handler(req, res) {
   try {
-    const rootRef = ref(db, "attendance");
-    const snapshot = await get(rootRef);
+    // Fetch attendance data (unchanged)
+    const attendanceRef = ref(db, "attendance");
+    const attendanceSnap = await get(attendanceRef);
 
-    if (!snapshot.exists()) {
-      return res.status(200).json({ data: [] });
-    }
+    let attendanceRecords = [];
+    if (attendanceSnap.exists()) {
+      const attendanceData = attendanceSnap.val(); // { "2025-08-01": { id1: {...}, ... }, ... }
 
-    const data = snapshot.val(); // structure: { "2025-08-01": { id1: {...}, id2: {...} }, ... }
-
-    const records = [];
-
-    for (const date in data) {
-      const dailyRecords = data[date];
-      for (const id in dailyRecords) {
-        records.push(dailyRecords[id]);
+      for (const date in attendanceData) {
+        const dailyRecords = attendanceData[date];
+        for (const id in dailyRecords) {
+          attendanceRecords.push(dailyRecords[id]);
+        }
       }
     }
 
-    return res.status(200).json({ data: records });
+    // Fetch company holidays data
+    const holidaysRef = ref(db, "companyHolidays");
+    const holidaysSnap = await get(holidaysRef);
+
+    let holidays = [];
+    if (holidaysSnap.exists()) {
+      const holidaysData = holidaysSnap.val(); // { "2025-08-09": { reason: "Rakshabandhan" }, ... }
+      holidays = Object.keys(holidaysData).map((date) => ({
+        date,
+        reason: holidaysData[date].reason,
+      }));
+    }
+
+    // Return combined data
+    return res.status(200).json({ data: attendanceRecords, holidays });
   } catch (err) {
-    console.error("❌ Error fetching attendance:", err);
-    return res.status(500).json({ error: "Failed to fetch attendance" });
+    console.error("❌ Error fetching attendance or holidays:", err);
+    return res.status(500).json({ error: "Failed to fetch attendance and holidays" });
   }
 }

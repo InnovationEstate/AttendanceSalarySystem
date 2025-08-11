@@ -71,7 +71,7 @@ export default function CompanyHolidaysPage() {
         {holidays[selectedDate] ? "Remove Holiday" : "Mark as Holiday"}
       </button>
 
-      <h2 className="text-xl font-semibold mt-8 mb-2">Upcoming Holidays</h2>
+      <h2 className="text-xl font-semibold mt-8 mb-2">Total Holidays</h2>
       <ul className="list-disc list-inside">
         {Object.entries(holidays)
           .sort(([a], [b]) => a.localeCompare(b))

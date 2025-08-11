@@ -3,6 +3,8 @@ import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import getAttendanceSummary from "../../utils/attendanceUtils";
 import { UAParser } from "ua-parser-js";
+import { db } from "../../lib/firebase"; // ✅ import initialized DB
+import { ref, get } from "firebase/database"; // ✅ Import Firebase DB
 
 export default function Dashboard() {
   const router = useRouter();
@@ -14,38 +16,94 @@ export default function Dashboard() {
     unpaidLeaves: 0,
     weekOff: 0,
     totalDays: 0,
+    holidaysCount: 0,
   });
 
   const [emp, setEmp] = useState(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
+  const [holidays, setHolidays] = useState([]); // Store holidays for display if needed
 
-  const fetchSummary = (email) => {
-    const now = new Date();
-    const month = now.getMonth();
-    const year = now.getFullYear();
-    const today = now.getDate();
+  // Fetch holidays and return list for immediate use
+  const fetchCompanyHolidays = async () => {
+    try {
+      const holidaysRef = ref(db, "companyHolidays");
+      const snapshot = await get(holidaysRef);
 
-    fetch("/api/attendance/get")
-      .then((res) => res.json())
-      .then((json) => {
-        const result = getAttendanceSummary(
-          json.data,
-          month,
-          year,
-          today,
-          true,
-          email
-        );
-        setSummary(result);
-      });
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const holidaysList = Object.keys(data).map((date) => ({
+          date,
+          reason: data[date].reason,
+        }));
+        setHolidays(holidaysList);
+        return holidaysList; // Return for immediate use in fetchSummary
+      }
+    } catch (err) {
+      console.error("Error fetching holidays:", err);
+    }
+    return [];
   };
+
+ const fetchSummary = (email, holidaysList = []) => {
+  const now = new Date();
+  const month = now.getMonth();
+  const year = now.getFullYear();
+  const today = now.getDate();
+
+  fetch("/api/attendance/get")
+    .then(res => res.json())
+    .then(json => {
+      // Normalize date string to YYYY-MM-DD
+      const normalizeDate = (dateStr) => {
+        const d = new Date(dateStr);
+        const y = d.getFullYear();
+        const m = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+        return `${y}-${m}-${day}`;
+      };
+
+      // Filter company holidays for this month and year, only up to today
+      const monthHolidays = holidaysList.filter(h => {
+        const d = new Date(h.date);
+        return d.getMonth() === month && d.getFullYear() === year && d.getDate() <= today;
+      });
+
+      // Create a set of normalized holiday dates for quick lookup
+      const holidayDatesSet = new Set(monthHolidays.map(h => normalizeDate(h.date)));
+
+      // Filter attendance records of this employee in this month and year (DO NOT filter out holidays here)
+      const employeeRecordsThisMonth = json.data.filter(record => {
+        if (record.email.toLowerCase() !== email.toLowerCase()) return false;
+        const recordDateObj = new Date(record.date);
+        return recordDateObj.getMonth() === month && recordDateObj.getFullYear() === year && recordDateObj.getDate() <= today;
+      });
+
+      // Pass holidays set to getAttendanceSummary so it skips leave on holidays
+      const result = getAttendanceSummary(employeeRecordsThisMonth, month, year, today, true, email, holidayDatesSet);
+
+      setSummary({
+        ...result,
+        totalDays: new Date(year, month + 1, 0).getDate(),
+        holidaysCount: monthHolidays.length,  // exact count of company holidays
+      });
+    })
+    .catch(err => {
+      console.error("Error fetching attendance or holidays:", err);
+    });
+};
+
+
 
   useEffect(() => {
     const storedEmp = JSON.parse(localStorage.getItem("employee"));
     if (!storedEmp?.email) return;
     setEmp(storedEmp);
-    fetchSummary(storedEmp.email);
+
+    // Fetch holidays first, then fetch summary with holidays list
+    fetchCompanyHolidays().then((holidaysList) => {
+      fetchSummary(storedEmp.email, holidaysList);
+    });
   }, []);
 
   const markAttendance = async (
@@ -54,7 +112,6 @@ export default function Dashboard() {
     setLoading,
     router
   ) => {
-    // Get employee from localStorage
     const emp = JSON.parse(localStorage.getItem("employee"));
 
     if (!emp) {
@@ -70,7 +127,6 @@ export default function Dashboard() {
     setLoading(true);
     setMessage("");
 
-    // Step 1: Get device info using UAParser
     const parser = new UAParser();
     const result = parser.getResult();
     const deviceInfo = {
@@ -83,7 +139,6 @@ export default function Dashboard() {
       userAgent: navigator.userAgent,
     };
 
-    // Step 2: Get geolocation coordinates
     const getLocation = () =>
       new Promise((resolve, reject) => {
         if (!navigator.geolocation) {
@@ -111,7 +166,6 @@ export default function Dashboard() {
         );
       });
 
-    // Step 3: Reverse geocode lat/lon to address string
     const getAddressFromCoords = async ({ latitude, longitude }) => {
       try {
         const response = await fetch("/api/geo/reverse", {
@@ -132,7 +186,6 @@ export default function Dashboard() {
       const coords = await getLocation();
       const address = await getAddressFromCoords(coords);
 
-      // Send login request with stored password
       const res = await fetch("/api/employee/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -140,7 +193,7 @@ export default function Dashboard() {
           name: emp.name,
           email: emp.email,
           number: emp.number,
-          password: emp.password, // IMPORTANT: send password stored locally
+          password: emp.password,
           location: {
             latitude: coords.latitude,
             longitude: coords.longitude,
@@ -162,7 +215,7 @@ export default function Dashboard() {
       } else {
         setMessage("✅ Attendance marked successfully!");
         if (typeof fetchSummary === "function") {
-          fetchSummary(emp.email);
+          fetchSummary(emp.email, holidays);
         }
         setTimeout(() => {
           router.push("/employee/attendance");
@@ -215,7 +268,6 @@ export default function Dashboard() {
           </button>
         </div>
 
-        {/* ✅ Show Message */}
         {message && (
           <div
             className={`mb-4 p-3 rounded ${
@@ -229,7 +281,7 @@ export default function Dashboard() {
         )}
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-          <StatCard title="Total Days in Month" value={totalDaysInMonth} />
+          <StatCard title="Total Days in Month" value={summary.totalDays} />
           <StatCard
             title="Total Present"
             value={summary.present + summary.half}
@@ -238,6 +290,7 @@ export default function Dashboard() {
           <StatCard title="Leaves" value={summary.leave} />
           <StatCard title="Week Offs" value={summary.weekOff} />
           <StatCard title="Unpaid Leaves" value={summary.unpaidLeaves} />
+          <StatCard title="Holidays till Today" value={summary.holidaysCount} />
         </div>
       </div>
     </div>

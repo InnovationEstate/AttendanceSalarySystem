@@ -1,4 +1,3 @@
-// Updated Admin Salary Page - Using Firebase Realtime Database
 "use client";
 
 import React, { useEffect, useState } from "react";
@@ -11,6 +10,7 @@ import { app } from "../../lib/firebase";
 export default function AdminSalary() {
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
+  const [holidays, setHolidays] = useState([]); // <-- Added state for holidays
   const [totalNetSalary, setTotalNetSalary] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -23,6 +23,7 @@ export default function AdminSalary() {
       try {
         const empSnap = await get(child(dbRef, "employees"));
         const attSnap = await get(child(dbRef, "attendance"));
+        const holidaysSnap = await get(child(dbRef, "companyHolidays")); // <-- Fetch holidays
 
         const empList = [];
         empSnap.forEach((childSnap) => {
@@ -39,8 +40,12 @@ export default function AdminSalary() {
           });
         }
 
+        // Process holidays into array of date strings (keys)
+        const holidaysList = holidaysSnap.exists() ? Object.keys(holidaysSnap.val()) : [];
+
         setEmployees(empList || []);
         setAttendance(attList || []);
+        setHolidays(holidaysList || []); // <-- Set holidays
       } catch (err) {
         console.error("Firebase fetch error:", err);
       }
@@ -56,10 +61,30 @@ export default function AdminSalary() {
       ? new Date().getDate()
       : totalDays;
 
+  // Create a Set of holidays for selected month/year for quick lookup
+  const holidayDatesSet = new Set(
+    holidays.filter((dateStr) => {
+      const d = new Date(dateStr);
+      return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+    })
+  );
+
+  // Count holidays in month up to today (for display)
+  const holidaysCount = holidays.filter((dateStr) => {
+    const d = new Date(dateStr);
+    const day = d.getDate();
+    return (
+      d.getMonth() === selectedMonth &&
+      d.getFullYear() === selectedYear &&
+      day <= today
+    );
+  }).length;
+
   const employeesWithSalary = employees.map((emp) => {
     const monthlySalary = emp.salary ? Number(emp.salary) : 0;
     const perDaySalary = monthlySalary / totalDays;
 
+    // Filter employee attendance for month/year
     const empAttendance = attendance.filter(
       (att) =>
         att.email === emp.email &&
@@ -83,6 +108,7 @@ export default function AdminSalary() {
       };
     }
 
+    // Pass holidayDatesSet to exclude holidays from leave/unpaidLeaves count
     const {
       present,
       half,
@@ -96,10 +122,13 @@ export default function AdminSalary() {
       selectedYear,
       today,
       true,
-      emp.email
+      emp.email,
+      holidayDatesSet // <-- pass holidays here!
     );
 
     const grossSalaryTillToday = perDaySalary * today;
+
+    // Deduction excludes holidays (no deduction for holidays)
     const totalDeduction =
       unpaidLeaves * perDaySalary + unpaidHalfDays * 0.5 * perDaySalary;
 
@@ -117,6 +146,7 @@ export default function AdminSalary() {
       unpaidLeaves,
       unpaidHalfDays,
       paidHalfDaysUsed,
+      holidaysCount, // you can optionally include this to display per employee if needed
     };
   });
 
@@ -156,7 +186,17 @@ export default function AdminSalary() {
 
     autoTable(doc, {
       startY: 40,
-      head: [["ID", "Name", "Email", "Number", "Monthly Salary", "Total Deduction", "Net Salary"]],
+      head: [
+        [
+          "ID",
+          "Name",
+          "Email",
+          "Number",
+          "Monthly Salary",
+          "Total Deduction",
+          "Net Salary",
+        ],
+      ],
       body: tableData,
       theme: "striped",
       styles: { fontSize: 10 },
@@ -185,10 +225,13 @@ export default function AdminSalary() {
           <h1 className="text-xl md:text-2xl font-semibold text-gray-800">
             Salary -
             <span className="font-bold text-black">
-              {new Date(selectedYear, selectedMonth).toLocaleString("default", {
-                month: "long",
-                year: "numeric",
-              })}
+              {new Date(selectedYear, selectedMonth).toLocaleString(
+                "default",
+                {
+                  month: "long",
+                  year: "numeric",
+                }
+              )}
             </span>
           </h1>
           <div className="flex items-center gap-2">

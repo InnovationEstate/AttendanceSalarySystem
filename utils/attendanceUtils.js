@@ -35,7 +35,8 @@ export default function getAttendanceSummary(
   year,
   today, // current day of month (1-based)
   countTillToday = true,
-  employeeEmail
+  employeeEmail,
+  holidaysSet = new Set()  // <-- NEW parameter: Set of holiday dates "yyyy-mm-dd"
 ) {
   // Calculate days in the month
   const totalDays = new Date(year, month + 1, 0).getDate();
@@ -68,6 +69,13 @@ export default function getAttendanceSummary(
     if (isTuesday) {
       weekOff++;
       detailedDays.push({ day, status: "Week Off" });
+      continue;
+    }
+
+    // *** New: Check if date is company holiday ***
+    if (holidaysSet.has(dateStr)) {
+      detailedDays.push({ day, status: "Holiday" });
+      // Holiday is paid, so skip leave/unpaid logic
       continue;
     }
 
