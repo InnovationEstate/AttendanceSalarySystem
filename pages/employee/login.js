@@ -91,9 +91,12 @@ export default function EmployeeLogin() {
           name: data.employee.name,
           email: data.employee.email,
           number: data.employee.number,
+          password: password, // Only if you need it later
         })
       );
+      localStorage.setItem("loginTime", new Date().toISOString());
 
+      sessionStorage.setItem("isEmployeeLoggedIn", "true");
       router.push("/employee/attendance");
     } catch (err) {
       setError(err.message || "Login failed");

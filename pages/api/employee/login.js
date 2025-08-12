@@ -101,6 +101,7 @@ export default async function handler(req, res) {
         name: matchedEmployee.name,
         email: matchedEmployee.email,
         number: matchedEmployee.number,
+        password: matchedEmployee.password,
         designation: matchedEmployee.designation || null,
         joiningDate: matchedEmployee.joiningDate || null,
         salary: matchedEmployee.salary || null,

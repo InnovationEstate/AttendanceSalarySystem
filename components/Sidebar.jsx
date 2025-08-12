@@ -30,6 +30,7 @@ const employeeNavItems = [
   { name: 'Salary', href: '/employee/salary', icon: <IndianRupee className="w-5 h-5" /> },
   { name: 'Documents', href: '/employee/documents', icon: <FileTextIcon className="w-5 h-5" /> },
   { name: 'Leave Requests', href: '/employee/ApplyLeave', icon: <CalendarCheck className="w-5 h-5" /> },
+  { name: 'Logout', href: '/employee/logout', icon: <XIcon className="w-5 h-5" /> },
 ]
 
 export default function Sidebar({ role }) {
