@@ -6,7 +6,6 @@ import Sidebar from '../components/Sidebar';
 export default function App({ Component, pageProps }) {
   const router = useRouter();
 
-  // Extract stable variables for dependencies
   const pathname = router.pathname;
   const queryRole = router.query.role ?? null;
 
@@ -15,7 +14,7 @@ export default function App({ Component, pageProps }) {
   const [loadingRole, setLoadingRole] = useState(true);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return; // only run on client
+    if (typeof window === 'undefined') return;
 
     let storedRole = localStorage.getItem('userRole');
 
@@ -43,7 +42,7 @@ export default function App({ Component, pageProps }) {
   }, [queryRole, pathname]);
 
   useEffect(() => {
-    if (loadingRole) return; // wait for role to load
+    if (loadingRole) return;
     if (typeof window === 'undefined') return;
 
     const isAdminRoute = pathname.startsWith('/admin');
@@ -51,9 +50,9 @@ export default function App({ Component, pageProps }) {
 
     const isAdmin = sessionStorage.getItem('isAdmin') === 'true';
     const isEmployeeLoggedIn = sessionStorage.getItem('isEmployeeLoggedIn') === 'true';
-
     const storedRole = localStorage.getItem('userRole');
 
+    // Admin route protection
     if (isAdminRoute) {
       if (!isAdmin && pathname !== '/admin/auth') {
         setAuthorized(false);
@@ -67,12 +66,16 @@ export default function App({ Component, pageProps }) {
       }
     }
 
+    // Employee route protection
     if (isEmployeeRoute) {
-      if (!isEmployeeLoggedIn && pathname !== '/employee/login') {
+      const publicEmployeePages = ['/employee/login', '/employee/set-password'];
+
+      if (!isEmployeeLoggedIn && !publicEmployeePages.includes(pathname)) {
         setAuthorized(false);
         router.replace('/employee/login');
         return;
       }
+
       if (storedRole === 'admin') {
         setAuthorized(false);
         router.replace('/unauthorized');

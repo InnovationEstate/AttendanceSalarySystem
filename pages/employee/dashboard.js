@@ -290,7 +290,7 @@ export default function Dashboard() {
           <StatCard title="Leaves" value={summary.leave} />
           <StatCard title="Week Offs" value={summary.weekOff} />
           <StatCard title="Unpaid Leaves" value={summary.unpaidLeaves} />
-          <StatCard title="Holidays till Today" value={summary.holidaysCount} />
+          <StatCard title="Holidays " value={summary.holidaysCount} />
         </div>
       </div>
     </div>

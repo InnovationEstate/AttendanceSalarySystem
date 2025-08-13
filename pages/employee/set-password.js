@@ -1,19 +1,12 @@
 "use client";
-import { useState, useEffect } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
+import { useRouter } from "next/navigation";
 
 export default function SetPassword() {
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [message, setMessage] = useState("");
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const email = searchParams.get("email") || ""; // get email from query param
-
-  useEffect(() => {
-    if (!email) {
-      setMessage("❌ Email not found in URL. Please use the correct link.");
-    }
-  }, [email]);
 
   const validatePassword = (pwd) => {
     const regex =
@@ -25,8 +18,8 @@ export default function SetPassword() {
     e.preventDefault();
     setMessage("");
 
-    if (!email) {
-      setMessage("❌ Missing email, cannot set password.");
+    if (!email.trim()) {
+      setMessage("❌ Please enter your email.");
       return;
     }
 
@@ -46,7 +39,7 @@ export default function SetPassword() {
       const res = await fetch("/api/employee/set-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: email.trim(), password }),
       });
 
       const data = await res.json();
@@ -68,12 +61,24 @@ export default function SetPassword() {
       <h2 className="text-2xl mb-4 font-bold text-center">Set Your Password</h2>
 
       {message && (
-        <p className={`mb-4 text-sm text-center ${message.startsWith("❌") ? "text-red-600" : "text-green-600"}`}>
+        <p
+          className={`mb-4 text-sm text-center ${
+            message.startsWith("❌") ? "text-red-600" : "text-green-600"
+          }`}
+        >
           {message}
         </p>
       )}
 
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+        <input
+          type="email"
+          placeholder="Your Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="p-2 border rounded"
+          required
+        />
         <input
           type="password"
           placeholder="New Password"
@@ -81,7 +86,6 @@ export default function SetPassword() {
           onChange={(e) => setPassword(e.target.value)}
           className="p-2 border rounded"
           required
-          autoFocus
         />
         <button
           type="submit"
