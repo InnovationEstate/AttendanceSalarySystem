@@ -247,17 +247,10 @@
 // }
 
 
-
 "use client";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
-import {
-  ref,
-  get,
-  set,
-  update,
-  remove,
-} from "firebase/database";
+import { ref, get, set, remove } from "firebase/database";
 
 export default function EmployeeManagement() {
   const [employees, setEmployees] = useState([]);
@@ -271,6 +264,10 @@ export default function EmployeeManagement() {
   });
   const [editingKey, setEditingKey] = useState(null);
   const [showForm, setShowForm] = useState(false);
+
+  // 🔹 Delete confirmation modal states
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [employeeToDelete, setEmployeeToDelete] = useState(null);
 
   useEffect(() => {
     fetchEmployees();
@@ -354,13 +351,28 @@ export default function EmployeeManagement() {
     }
   }
 
-  async function handleDelete(index) {
+  // 🔹 Show modal before delete
+  function handleDeleteClick(emp) {
+    setEmployeeToDelete(emp);
+    setShowDeleteModal(true);
+  }
+
+  // 🔹 Confirm delete
+  async function handleDeleteConfirm() {
+    if (!employeeToDelete) return;
     try {
-      await remove(ref(db, `employees/${index}`));
+      await remove(ref(db, `employees/${employeeToDelete.firebaseKey}`));
+      setShowDeleteModal(false);
+      setEmployeeToDelete(null);
       fetchEmployees();
     } catch (err) {
       console.error("Error deleting employee:", err);
     }
+  }
+
+  function handleCancelDelete() {
+    setEmployeeToDelete(null);
+    setShowDeleteModal(false);
   }
 
   function scrollToForm() {
@@ -487,14 +499,17 @@ export default function EmployeeManagement() {
           </thead>
           <tbody>
             {employees.map((emp) => (
-              <tr key={emp.firebaseKey} className="border-t hover:bg-gray-50 transition">
+              <tr
+                key={emp.firebaseKey}
+                className="border-t hover:bg-gray-50 transition"
+              >
                 <td className="p-3">{emp.id}</td>
                 <td className="p-3">{emp.name}</td>
                 <td className="p-3">{emp.email}</td>
                 <td className="p-3">{emp.number}</td>
                 <td className="p-3">{emp.designation}</td>
                 <td className="p-3">{emp.salary}</td>
-                <td className="p-3 space-y-1 sm:space-y-0 sm:space-x-2 flex flex-col sm:flex-row">
+                <td className="p-3 flex flex-col sm:flex-row gap-2">
                   <button
                     onClick={() => handleEdit(emp)}
                     className="px-3 py-1 bg-yellow-400 rounded text-white hover:bg-yellow-500 cursor-pointer"
@@ -502,7 +517,7 @@ export default function EmployeeManagement() {
                     Edit
                   </button>
                   <button
-                    onClick={() => handleDelete(emp.firebaseKey)}
+                    onClick={() => handleDeleteClick(emp)}
                     className="px-3 py-1 bg-red-500 rounded text-white hover:bg-red-600 cursor-pointer"
                   >
                     Delete
@@ -513,6 +528,33 @@ export default function EmployeeManagement() {
           </tbody>
         </table>
       </div>
+
+      {/* 🔹 Delete Confirmation Modal */}
+      {showDeleteModal && employeeToDelete && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/60 bg-opacity-50 z-50">
+          <div className="bg-white p-6 rounded-xl shadow-lg w-80 text-center">
+            <h2 className="text-lg font-bold mb-4">Confirm Delete</h2>
+            <p className="text-gray-700 mb-6">
+              Are you sure you want to delete{" "}
+              <span className="font-semibold">{employeeToDelete.name}</span>?
+            </p>
+            <div className="flex justify-center gap-4">
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700"
+              >
+                Yes, Delete
+              </button>
+              <button
+                onClick={handleCancelDelete}
+                className="px-4 py-2 bg-gray-400 text-white rounded hover:bg-gray-500"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
