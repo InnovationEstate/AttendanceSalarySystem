@@ -74,6 +74,35 @@ Designed for **HR and Payroll management**, with **real-time monitoring, secure 
 ## ⚡ Getting Started
 
 ### 1️⃣ Clone the repository
-```bash
+
 git clone <your-repo-url>
 cd attendance-salary-system
+
+### 2️⃣ Install Dependencies
+npm install
+# or
+yarn install
+# or
+pnpm install
+
+### 3️⃣ Setup Firebase
+
+Go to Firebase Console
+ and create a new project.
+
+Enable the following services:
+
+Realtime Database (in test mode or with your preferred rules)
+
+Storage (for employee documents)
+
+Copy your Firebase configuration and create a file at lib/firebase.js:
+
+### 4️⃣ Run the Development Server
+npm run dev
+# or
+yarn dev
+# or
+pnpm dev
+
+Open http://localhost:3000  in your browser to see the app.
