@@ -18,6 +18,15 @@ export default function App({ Component, pageProps }) {
 
     let storedRole = localStorage.getItem('userRole');
 
+    // ✅ Skip role handling on logout pages
+    if (pathname.includes('/logout')) {
+      setRole(null);
+      localStorage.removeItem('userRole');
+      storedRole = null;
+      setLoadingRole(false);
+      return;
+    }
+
     if (queryRole === 'admin' || queryRole === 'employee') {
       setRole(queryRole);
       localStorage.setItem('userRole', queryRole);
@@ -44,6 +53,12 @@ export default function App({ Component, pageProps }) {
   useEffect(() => {
     if (loadingRole) return;
     if (typeof window === 'undefined') return;
+
+    // ✅ Skip auth checks on logout pages
+    if (pathname.includes('/logout')) {
+      setAuthorized(false);
+      return;
+    }
 
     const isAdminRoute = pathname.startsWith('/admin');
     const isEmployeeRoute = pathname.startsWith('/employee');

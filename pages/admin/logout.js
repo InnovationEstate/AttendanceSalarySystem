@@ -6,11 +6,12 @@ export default function AdminLogout() {
   const router = useRouter();
 
   useEffect(() => {
-    // 1️⃣ Clear local storage
-    localStorage.clear(); // or remove specific keys: localStorage.removeItem("adminId");
+    // Clear all storages
+    localStorage.clear();
+    sessionStorage.clear();
 
-    // 2️⃣ Redirect to main/login page after clearing
-    router.replace("/"); // "/" is your main page, change if needed
+    // Redirect to home
+    router.replace("/");
   }, [router]);
 
   return (
