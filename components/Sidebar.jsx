@@ -23,8 +23,8 @@ const adminNavItems = [
   { name: 'Leave Requests', href: '/admin/ManageLeaves', icon: <CalendarCheck className="w-5 h-5" /> },
   { name: 'Company Holidays', href: '/admin/companyHolidays', icon: <CalendarCheck className="w-5 h-5" /> },
   { name: 'Birthdays', href: '/admin/birthdays', icon: <CalendarCheck className="w-5 h-5" /> },
-  { name: 'Logout', href: '/admin/logout', icon: <XIcon className="w-5 h-5" /> },
   { name: 'weekoff', href: '/admin/weekoff', icon: <CalendarCheck className="w-5 h-5" /> },
+  { name: 'Logout', href: '/admin/logout', icon: <XIcon className="w-5 h-5" /> },
 ]
 
 const employeeNavItems = [
