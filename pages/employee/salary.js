@@ -222,6 +222,8 @@ export default function EmployeeSalary() {
     doc.text(`Salary Slip`, 14, 30);
     doc.text(`Month: ${monthStr}`, 14, 36);
     doc.text(`Employee: ${employee.name}`, 14, 42);
+    doc.text(`Email: ${employee.email}`, 14, 48);
+    doc.text(`Employee ID: ${employee.id}`, 14, 54);
 
     autoTable(doc, {
       startY: 55,

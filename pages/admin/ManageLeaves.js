@@ -41,15 +41,21 @@ export default function ManageLeaves() {
   };
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
-      <h2 className="text-2xl font-bold mb-4">Pending Leave Requests</h2>
-      {requests.map((req) => {
+  <div className="p-6 max-w-3xl mx-auto">
+    <h2 className="text-2xl font-bold mb-4"> Leave Requests</h2>
+
+    {requests.length === 0 ? (
+      <p className="text-gray-500 italic">No Leave Requests</p>
+    ) : (
+      requests.map((req) => {
         const { id, name } = getEmployeeInfo(req.email);
         return (
           <div key={req.id} className="border p-4 rounded mb-4">
             <p>
-              <strong>{id} - {name}</strong> applied for leave on {" "}
-              <strong>{req.date}</strong>
+              <strong>
+                {id} - {name}
+              </strong>{" "}
+              applied for leave on <strong>{req.date}</strong>
             </p>
             <p className="text-sm italic mb-2">{req.reason}</p>
             {req.status === "pending" ? (
@@ -74,7 +80,9 @@ export default function ManageLeaves() {
             )}
           </div>
         );
-      })}
-    </div>
-  );
+      })
+    )}
+  </div>
+);
+
 }

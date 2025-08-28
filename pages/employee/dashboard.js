@@ -5,6 +5,7 @@ import getAttendanceSummary from "../../utils/attendanceUtils";
 import { UAParser } from "ua-parser-js";
 import { db } from "../../lib/firebase"; // ✅ import initialized DB
 import { ref, get } from "firebase/database"; // ✅ Import Firebase DB
+import ReminderModal from "@/components/ReminderModal";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -255,6 +256,7 @@ export default function Dashboard() {
             <h2 className="text-sm sm:text-lg md:text-xl font-semibold text-gray-600">
               Welcome to your Dashboard
             </h2>
+            <ReminderModal employee={emp} />
           </div>
 
           <button

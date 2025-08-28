@@ -123,51 +123,36 @@ const viewDocument = async (docKey) => {
 };
 
 
-  const downloadDocument = async (docKey, event) => {
-  if (event) event.preventDefault();  // Prevent page reload if called from link/button click
+const downloadDocument = async (docKey, event) => {
+  if (event) event.preventDefault(); // prevent form reload
   if (!selectedEmp) return;
-  
+
   const fileMeta = files[docKey];
   if (!fileMeta) {
     alert("File not available for this document.");
     return;
   }
-  
+
   try {
-    const res = await fetch("/api/documents/serve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        employeeId: selectedEmp,
-        docKey,
-        isAdmin: true,
-      }),
-    });
-    
-    if (!res.ok) {
-      alert("Unable to download file.");
-      return;
-    }
-    
-    const data = await res.json();
-    if (!data.url) {
-      alert("File URL not received.");
-      return;
-    }
-    
-    // Create a hidden <a> element to trigger download
+    // ✅ Call our new API route directly
+    const downloadUrl = `/api/documents/download?employeeId=${encodeURIComponent(
+      selectedEmp
+    )}&docKey=${encodeURIComponent(docKey)}`;
+
+    // ✅ Create a hidden <a> tag to trigger browser's native download
     const a = document.createElement("a");
-    a.href = data.url;
-    a.download = fileMeta.originalName || `${selectedEmp}_${docKey}`;
-    a.style.display = "none";
+    a.href = downloadUrl;
+    a.download = fileMeta.name || `${docKey}`; // Suggested filename
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+
   } catch (err) {
     console.error("Download failed:", err);
     alert("Failed to download document.");
   }
 };
+
 
 
   return (
@@ -225,13 +210,16 @@ const viewDocument = async (docKey) => {
                   >
                     View
                   </button>
-                  <button
-                  download
-                    onClick={() => downloadDocument(docKey)}
-                    className="text-green-600 hover:cursor-pointer"
-                  >
-                    Download
-                  </button>
+              <a
+  href={`/api/documents/download?employeeId=${selectedEmp}&docKey=${docKey}&isAdmin=true`}
+  download
+  className="text-green-600 hover:cursor-pointer"
+>
+  Download
+</a>
+
+
+
                 </div>
               </div>
             ))}
