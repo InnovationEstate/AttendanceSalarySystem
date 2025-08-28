@@ -67,7 +67,8 @@ export default function AdminDocuments() {
             // Support both 'name' or 'storagePath' key inside object
             normalizedFiles[key] = {
               storagePath: val.storagePath || val.name || "",
-              originalName: val.originalName || val.name?.split("/").pop() || key,
+              originalName:
+                val.originalName || val.name?.split("/").pop() || key,
             };
           }
         });
@@ -86,74 +87,48 @@ export default function AdminDocuments() {
     }
   };
 
-const viewDocument = async (docKey) => {
+  const viewDocument = (docKey) => {
   if (!selectedEmp) {
     alert("Select an employee first.");
     return;
   }
 
-  try {
-    const res = await fetch("/api/documents/serve", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        employeeId: selectedEmp,
-        docKey,          // send docKey, not storagePath
-        isAdmin: true,   // or false if you want password verification
-        // password: "optionalPasswordIfNotAdmin"
-      }),
-    });
+  // ✅ Construct the API URL with query params
+  const url = `/api/documents/view?employeeId=${selectedEmp}&docKey=${docKey}`;
 
-    if (!res.ok) {
-      const errorData = await res.json();
-      alert(errorData.error || "Unable to access file.");
-      return;
-    }
-
-    const data = await res.json();
-    if (!data.url) {
-      alert("File URL not received.");
-      return;
-    }
-
-    window.open(data.url, "_blank");
-  } catch (error) {
-    alert("Failed to fetch document: " + error.message);
-  }
+  // ✅ Open file directly in a new tab
+  window.open(url, "_blank");
 };
 
 
-const downloadDocument = async (docKey, event) => {
-  if (event) event.preventDefault(); // prevent form reload
-  if (!selectedEmp) return;
+  const downloadDocument = async (docKey, event) => {
+    if (event) event.preventDefault(); // prevent form reload
+    if (!selectedEmp) return;
 
-  const fileMeta = files[docKey];
-  if (!fileMeta) {
-    alert("File not available for this document.");
-    return;
-  }
+    const fileMeta = files[docKey];
+    if (!fileMeta) {
+      alert("File not available for this document.");
+      return;
+    }
 
-  try {
-    // ✅ Call our new API route directly
-    const downloadUrl = `/api/documents/download?employeeId=${encodeURIComponent(
-      selectedEmp
-    )}&docKey=${encodeURIComponent(docKey)}`;
+    try {
+      // ✅ Call our new API route directly
+      const downloadUrl = `/api/documents/download?employeeId=${encodeURIComponent(
+        selectedEmp
+      )}&docKey=${encodeURIComponent(docKey)}`;
 
-    // ✅ Create a hidden <a> tag to trigger browser's native download
-    const a = document.createElement("a");
-    a.href = downloadUrl;
-    a.download = fileMeta.name || `${docKey}`; // Suggested filename
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-
-  } catch (err) {
-    console.error("Download failed:", err);
-    alert("Failed to download document.");
-  }
-};
-
-
+      // ✅ Create a hidden <a> tag to trigger browser's native download
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = fileMeta.name || `${docKey}`; // Suggested filename
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } catch (err) {
+      console.error("Download failed:", err);
+      alert("Failed to download document.");
+    }
+  };
 
   return (
     <div className="bg-gray-50 flex justify-center items-start p-6 min-h-screen">
@@ -187,7 +162,9 @@ const downloadDocument = async (docKey, event) => {
         {/* Documents Section */}
         <div className="md:col-span-2 bg-white rounded shadow p-6">
           <h2 className="text-2xl font-semibold mb-4">
-            {selectedEmp ? `Documents for ${selectedEmp}` : "Select an Employee"}
+            {selectedEmp
+              ? `Documents for ${selectedEmp}`
+              : "Select an Employee"}
           </h2>
           {loadingDocs && <p>Loading documents...</p>}
           {message && selectedEmp && (
@@ -210,16 +187,13 @@ const downloadDocument = async (docKey, event) => {
                   >
                     View
                   </button>
-              <a
-  href={`/api/documents/download?employeeId=${selectedEmp}&docKey=${docKey}&isAdmin=true`}
-  download
-  className="text-green-600 hover:cursor-pointer"
->
-  Download
-</a>
-
-
-
+                  <a
+                    href={`/api/documents/download?employeeId=${selectedEmp}&docKey=${docKey}&isAdmin=true`}
+                    download
+                    className="text-green-600 hover:cursor-pointer"
+                  >
+                    Download
+                  </a>
                 </div>
               </div>
             ))}
