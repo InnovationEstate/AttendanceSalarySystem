@@ -1,40 +1,108 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/pages/api-reference/create-next-app).
+# 🏢 Employee Attendance & Salary Management System
 
-## Getting Started
 
-First, run the development server:
+A **Next.js + Firebase** web application for managing **employee attendance, leave requests, salary, and documents**.  
+Designed for **HR and Payroll management**, with **real-time monitoring, secure document uploads, and automated notifications**.
 
-```bash
+---
+
+## 🔖 Badges
+
+![Next.js](https://img.shields.io/badge/Next.js-14-blue?logo=next.js)
+![React](https://img.shields.io/badge/React-18-blue?logo=react)
+![Firebase](https://img.shields.io/badge/Firebase-FFCA28?logo=firebase&logoColor=black)
+![Tailwind](https://img.shields.io/badge/TailwindCSS-38B2AC?logo=tailwindcss&logoColor=white)
+![Vercel](https://img.shields.io/badge/Vercel-000000?logo=vercel&logoColor=white)
+![License](https://img.shields.io/badge/License-MIT-green)
+
+---
+
+## 🚀 Features
+
+### 👤 Employee Panel
+- 🔒 Secure login with **Employee ID & password**
+- 📝 Mark **attendance** with automatic timestamp
+- 📤 Apply for **leave** and view leave history
+- 📄 Upload and manage documents:
+  - Aadhar Card
+  - PAN Card
+  - Bank Details
+  - Photo
+  - Experience Letter
+- 💰 View salary details (based on attendance, leaves, and company holidays)
+- ⚠️ Receive **alerts for unusual login activity** (device, location, browser)
+
+### 🛠 Admin Panel
+- 🧑‍💼 Manage all employees: add, edit, and view details
+- 📊 View **attendance records** for employees or months
+- ✅ Approve/reject leave requests (auto-updates salary & attendance)
+- 🔔 Monitor **employee login activity**
+- 📥 Download attendance & salary reports as **Excel files**
+- 📁 View uploaded employee documents securely
+
+### 🔐 System & Security
+- 🔹 **Firebase Realtime Database** for employee, attendance, leave, and document data
+- 🔹 **Firebase Storage** for secure document uploads
+- 🔹 **Passwords hashed** before storage
+- 🔹 Real-time updates using Firebase listeners
+- 🔹 Email and Telegram notifications for:
+  - 🎉 Birthdays
+  - 🟢 Employee logins
+  - 📝 Leave requests
+  - ⚠️ Unusual login alerts
+
+---
+
+---
+
+## 🛠 Tech Stack
+
+| Technology | Purpose |
+|------------|---------|
+| **Next.js 14** | Frontend & Server-side Rendering |
+| **React 18** | UI Components |
+| **Node.js** | Backend API Routes |
+| **Firebase Realtime DB** | Employee, Attendance, Leave, Documents Data |
+| **Firebase Storage** | Secure Document Uploads |
+| **XLSX** | Attendance & Salary Excel Export |
+| **Telegram Bot** | Admin Notifications |
+| **Tailwind CSS** | UI Styling |
+| **Vercel** | Deployment |
+
+---
+
+## ⚡ Getting Started
+
+### 1️⃣ Clone the repository
+
+git clone <your-repo-url>
+cd attendance-salary-system
+
+### 2️⃣ Install Dependencies
+npm install
+# or
+yarn install
+# or
+pnpm install
+
+### 3️⃣ Setup Firebase
+
+Go to Firebase Console
+ and create a new project.
+
+Enable the following services:
+
+Realtime Database (in test mode or with your preferred rules)
+
+Storage (for employee documents)
+
+Copy your Firebase configuration and create a file at lib/firebase.js:
+
+### 4️⃣ Run the Development Server
 npm run dev
 # or
 yarn dev
 # or
 pnpm dev
-# or
-bun dev
-```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `pages/index.js`. The page auto-updates as you edit the file.
-
-[API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) can be accessed on [http://localhost:3000/api/hello](http://localhost:3000/api/hello). This endpoint can be edited in `pages/api/hello.js`.
-
-The `pages/api` directory is mapped to `/api/*`. Files in this directory are treated as [API routes](https://nextjs.org/docs/pages/building-your-application/routing/api-routes) instead of React pages.
-
-This project uses [`next/font`](https://nextjs.org/docs/pages/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn-pages-router) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/pages/building-your-application/deploying) for more details.
+Open http://localhost:3000  in your browser to see the app.
