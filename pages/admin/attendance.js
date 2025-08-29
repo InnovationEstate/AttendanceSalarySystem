@@ -491,6 +491,7 @@ function EmployeeCalendarAdmin({ email, name }) {
   const [selectedDate, setSelectedDate] = useState(null);
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [employeeData, setEmployeeData] = useState(null);
+  const [holidayReason, setHolidayReason] = useState("");
 
   const statusColor = {
     Present: "bg-green-500",
