@@ -1,6 +1,7 @@
+
 "use client";
 
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import getAttendanceSummary from "../../utils/attendanceUtils";
@@ -10,7 +11,9 @@ import { app } from "../../lib/firebase";
 export default function AdminSalary() {
   const [employees, setEmployees] = useState([]);
   const [attendance, setAttendance] = useState([]);
-  const [holidays, setHolidays] = useState([]); // <-- Added state for holidays
+  const [holidays, setHolidays] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [weekOffData, setWeekOffData] = useState({});
   const [totalNetSalary, setTotalNetSalary] = useState(0);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -21,15 +24,12 @@ export default function AdminSalary() {
 
     async function fetchData() {
       try {
+        // Employees
         const empSnap = await get(child(dbRef, "employees"));
+        const empList = empSnap.exists() ? Object.values(empSnap.val()) : [];
+
+        // Attendance
         const attSnap = await get(child(dbRef, "attendance"));
-        const holidaysSnap = await get(child(dbRef, "companyHolidays")); // <-- Fetch holidays
-
-        const empList = [];
-        empSnap.forEach((childSnap) => {
-          empList.push(childSnap.val());
-        });
-
         const attList = [];
         if (attSnap.exists()) {
           const attendanceData = attSnap.val();
@@ -40,12 +40,27 @@ export default function AdminSalary() {
           });
         }
 
-        // Process holidays into array of date strings (keys)
-        const holidaysList = holidaysSnap.exists() ? Object.keys(holidaysSnap.val()) : [];
+        // Holidays
+        const holidaysSnap = await get(child(dbRef, "companyHolidays"));
+        const holidaysList = holidaysSnap.exists()
+          ? Object.keys(holidaysSnap.val())
+          : [];
+
+        // Leave Requests
+        const leaveSnap = await get(child(dbRef, "leaveRequests"));
+        const leaveList = leaveSnap.exists()
+          ? Object.values(leaveSnap.val())
+          : [];
+
+        // Week Offs
+        const weekOffSnap = await get(child(dbRef, "weekOff"));
+        const weekOffObj = weekOffSnap.exists() ? weekOffSnap.val() : {};
 
         setEmployees(empList || []);
         setAttendance(attList || []);
-        setHolidays(holidaysList || []); // <-- Set holidays
+        setHolidays(holidaysList || []);
+        setLeaveRequests(leaveList || []);
+        setWeekOffData(weekOffObj || {});
       } catch (err) {
         console.error("Firebase fetch error:", err);
       }
@@ -54,84 +69,95 @@ export default function AdminSalary() {
     fetchData();
   }, []);
 
-  const totalDays = new Date(selectedYear, selectedMonth + 1, 0).getDate();
-  const today =
+  // ✅ Calculate days till today (if current month), otherwise full month
+  const totalDaysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  const daysTillToday =
     selectedMonth === new Date().getMonth() &&
     selectedYear === new Date().getFullYear()
       ? new Date().getDate()
-      : totalDays;
+      : totalDaysInMonth;
 
-  // Create a Set of holidays for selected month/year for quick lookup
-  const holidayDatesSet = new Set(
-    holidays.filter((dateStr) => {
-      const d = new Date(dateStr);
-      return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
-    })
+  // Filter holidays for this month
+  const holidayDatesSet = useMemo(
+    () =>
+      new Set(
+        holidays.filter((dateStr) => {
+          const d = new Date(dateStr);
+          return (
+            d.getMonth() === selectedMonth && d.getFullYear() === selectedYear
+          );
+        })
+      ),
+    [holidays, selectedMonth, selectedYear]
   );
-
-  // Count holidays in month up to today (for display)
-  const holidaysCount = holidays.filter((dateStr) => {
-    const d = new Date(dateStr);
-    const day = d.getDate();
-    return (
-      d.getMonth() === selectedMonth &&
-      d.getFullYear() === selectedYear &&
-      day <= today
-    );
-  }).length;
 
   const employeesWithSalary = employees.map((emp) => {
     const monthlySalary = emp.salary ? Number(emp.salary) : 0;
-    const perDaySalary = monthlySalary / totalDays;
 
-    // Filter employee attendance for month/year
-    const empAttendance = attendance.filter(
-      (att) =>
-        att.email === emp.email &&
-        new Date(att.date).getMonth() === selectedMonth &&
-        new Date(att.date).getFullYear() === selectedYear
+    // Build weekOff set for this emp
+    const weekOffSet = new Set(
+      Object.keys(weekOffData[emp.id] || {}).filter((dateStr) => {
+        const d = new Date(dateStr);
+        return (
+          weekOffData[emp.id][dateStr] === true &&
+          d.getMonth() === selectedMonth &&
+          d.getFullYear() === selectedYear
+        );
+      })
     );
 
-    if (empAttendance.length === 0) {
-      return {
-        ...emp,
-        monthlySalary,
-        grossSalary: 0,
-        totalDeduction: 0,
-        netSalary: 0,
-        present: 0,
-        half: 0,
-        leave: 0,
-        unpaidLeaves: 0,
-        unpaidHalfDays: 0,
-        paidHalfDaysUsed: 0,
-      };
-    }
+    // Build approved leaves set for this emp
+    const approvedLeavesSet = new Set(
+      leaveRequests
+        .filter(
+          (lr) =>
+            lr.email === emp.email &&
+            lr.status === "approved" &&
+            new Date(lr.startDate).getMonth() === selectedMonth &&
+            new Date(lr.startDate).getFullYear() === selectedYear
+        )
+        .map((lr) => lr.startDate)
+    );
 
-    // Pass holidayDatesSet to exclude holidays from leave/unpaidLeaves count
-    const {
-      present,
-      half,
-      leave,
-      unpaidLeaves,
-      unpaidHalfDays,
-      paidHalfDaysUsed,
-    } = getAttendanceSummary(
+    // --- Attendance Summary (only till today) ---
+    let summary = getAttendanceSummary(
       attendance,
       selectedMonth,
       selectedYear,
-      today,
+      daysTillToday,
       true,
       emp.email,
-      holidayDatesSet // <-- pass holidays here!
+      holidayDatesSet,
+      weekOffSet,
+      approvedLeavesSet
     );
 
-    const grossSalaryTillToday = perDaySalary * today;
+    // --- ✅ Apply "1 Absent Paid Rule" ---
+    if (summary.absent > 0 && summary.paidLeavesUsed === 0) {
+      summary.absent -= 1;
+      summary.paidLeavesUsed += 1;
+    }
 
-    // Deduction excludes holidays (no deduction for holidays)
-    const totalDeduction =
-      unpaidLeaves * perDaySalary + unpaidHalfDays * 0.5 * perDaySalary;
+    // --- Salary Calculation ---
+    const effectiveDays = daysTillToday - summary.weekOff; // working days till today excluding weekoffs
+    const perDaySalary = monthlySalary / totalDaysInMonth; // base on full month
+    const grossSalaryTillToday = perDaySalary * daysTillToday; // proportional salary till today
 
+    // Paid days count
+    const payableDays =
+      summary.present +
+      summary.paidLeavesUsed +
+      summary.paidHalfDaysUsed * 0.5 +
+      summary.leave +
+      (summary.holidays || 0);
+
+    // Unpaid days count
+    const unpaidDays =
+      summary.absent +
+      summary.unpaidLeaves +
+      summary.unpaidHalfDays * 0.5;
+
+    const totalDeduction = unpaidDays * perDaySalary;
     const netSalary = grossSalaryTillToday - totalDeduction;
 
     return {
@@ -140,13 +166,7 @@ export default function AdminSalary() {
       grossSalary: grossSalaryTillToday,
       totalDeduction,
       netSalary,
-      present,
-      half,
-      leave,
-      unpaidLeaves,
-      unpaidHalfDays,
-      paidHalfDaysUsed,
-      holidaysCount, // you can optionally include this to display per employee if needed
+      ...summary,
     };
   });
 
@@ -163,10 +183,7 @@ export default function AdminSalary() {
 
     const monthStr = new Date(selectedYear, selectedMonth).toLocaleString(
       "default",
-      {
-        month: "long",
-        year: "numeric",
-      }
+      { month: "long", year: "numeric" }
     );
 
     doc.setFontSize(18);
@@ -179,7 +196,7 @@ export default function AdminSalary() {
       emp.name || "N/A",
       emp.email || "N/A",
       emp.number || "N/A",
-      emp.monthlySalary.toFixed(2),
+      emp.grossSalary.toFixed(2),
       emp.totalDeduction.toFixed(2),
       emp.netSalary.toFixed(2),
     ]);
@@ -192,7 +209,7 @@ export default function AdminSalary() {
           "Name",
           "Email",
           "Number",
-          "Monthly Salary",
+          "Gross Salary (Till Today)",
           "Total Deduction",
           "Net Salary",
         ],
@@ -205,7 +222,7 @@ export default function AdminSalary() {
     const finalY = doc.lastAutoTable.finalY || 40;
     doc.setFontSize(14);
     doc.text(
-      `Total Net Salary This Month: ₹${totalNetSalary.toFixed(2)}`,
+      `Total Net Salary Till Today: ₹${totalNetSalary.toFixed(2)}`,
       14,
       finalY + 15
     );
@@ -223,15 +240,12 @@ export default function AdminSalary() {
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-6">
         <div className="flex flex-col md:flex-row items-center gap-3 w-full md:w-auto">
           <h1 className="text-xl md:text-2xl font-semibold text-gray-800">
-            Salary -
+            Salary -{" "}
             <span className="font-bold text-black">
-              {new Date(selectedYear, selectedMonth).toLocaleString(
-                "default",
-                {
-                  month: "long",
-                  year: "numeric",
-                }
-              )}
+              {new Date(selectedYear, selectedMonth).toLocaleString("default", {
+                month: "long",
+                year: "numeric",
+              })}
             </span>
           </h1>
           <div className="flex items-center gap-2">
@@ -268,7 +282,7 @@ export default function AdminSalary() {
       </div>
 
       <div className="mb-4 text-lg text-green-700 font-semibold">
-        Total Net Salary: ₹{totalNetSalary.toFixed(2)}
+        Total Net Salary Till Today: ₹{totalNetSalary.toFixed(2)}
       </div>
 
       <div className="overflow-x-auto rounded shadow">
@@ -279,7 +293,9 @@ export default function AdminSalary() {
               <th className="px-4 py-2 text-left border">Name</th>
               <th className="px-4 py-2 text-left border">Email</th>
               <th className="px-4 py-2 text-left border">Number</th>
-              <th className="px-4 py-2 text-left border">Monthly Salary</th>
+              <th className="px-4 py-2 text-left border">
+                Gross Salary (Till Today)
+              </th>
               <th className="px-4 py-2 text-left border">Total Deduction</th>
               <th className="px-4 py-2 text-left border">Net Salary</th>
             </tr>
@@ -295,7 +311,7 @@ export default function AdminSalary() {
                 <td className="px-4 py-2 border">{emp.email}</td>
                 <td className="px-4 py-2 border">{emp.number}</td>
                 <td className="px-4 py-2 border text-green-600">
-                  ₹{emp.monthlySalary.toFixed(2)}
+                  ₹{emp.grossSalary.toFixed(2)}
                 </td>
                 <td className="px-4 py-2 border text-red-600">
                   ₹{emp.totalDeduction.toFixed(2)}
@@ -311,3 +327,4 @@ export default function AdminSalary() {
     </main>
   );
 }
+

@@ -1,157 +1,108 @@
+
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ref as storageRef,
   uploadBytesResumable,
-  getDownloadURL,
 } from "firebase/storage";
-
-import {
-  db,
-  storage,
-} from "../../lib/firebase";
-
-import {
-  get,
-  ref as dbRef,
-} from "firebase/database";
+import { db, storage } from "../../lib/firebase";
+import { get, ref as dbRef, set } from "firebase/database";
 
 const requiredDocs = ["aadhar", "pan", "bank", "photo"];
 const optionalDocs = ["experience"];
 
 export default function EmployeeDocuments() {
-  const [employeeId, setEmployeeId] = useState("");
-  const [password, setPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
+  const [employee, setEmployee] = useState(null); // employee object from localStorage
+  const [employeeId, setEmployeeId] = useState(""); // e.g. IE25002
   const [docs, setDocs] = useState({});
   const [existingDocs, setExistingDocs] = useState({});
   const [message, setMessage] = useState("");
-  const [verified, setVerified] = useState(false);
-  const [isNewUser, setIsNewUser] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // Handle input file change
-  const handleChange = (e) => {
-    setDocs({ ...docs, [e.target.name]: e.target.files[0] });
-  };
+  const allDocKeys = useMemo(() => [...requiredDocs, ...optionalDocs], []);
 
-  // Password strength regex
-  const isStrongPassword = (pass) =>
-    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[\W_]).{8,}$/.test(pass);
-
-  // Verify employee password via backend API
-  const verifyOrInitialize = async () => {
-    setMessage("");
-    if (!employeeId) {
-      setMessage("Please enter Employee ID");
-      return;
-    }
-    if (!password && !isNewUser) {
-      setMessage("Please enter password");
-      return;
-    }
-
-    setLoading(true);
-
+  // Load employee info from localStorage & fetch employeeId from DB
+  useEffect(() => {
     try {
-      const metaRes = await fetch("/api/documents/verify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ employeeId, password }),
-      });
-
-      if (metaRes.ok) {
-        const metaData = await metaRes.json();
-        if (metaData.success) {
-          setVerified(true);
-          setIsNewUser(false);
-          setMessage("Password verified! You can now view or upload documents.");
-          await fetchExistingDocs(employeeId);
-        } else {
-          setMessage("Verification failed.");
-        }
-      } else if (metaRes.status === 404) {
-        setIsNewUser(true);
-        setVerified(false);
-        setMessage(
-          "New user detected. Please create a strong password and upload required documents."
-        );
+      const stored = localStorage.getItem("employee");
+      if (stored) {
+        const emp = JSON.parse(stored);
+        setEmployee(emp);
+        findEmployeeByEmail(emp.email);
       } else {
-        const err = await metaRes.json();
-        setMessage(err.error || "Verification failed. Check your credentials.");
+        setMessage("No employee found in localStorage.");
       }
-    } catch (error) {
-      setMessage("Error verifying employee: " + error.message);
+    } catch (err) {
+      setMessage("Failed to parse employee from localStorage.");
+    }
+  }, []);
+
+  // 1️⃣ Find employeeId in employees database by email
+  const findEmployeeByEmail = async (email) => {
+    if (!email) return;
+    setLoading(true);
+    try {
+      const employeesRef = dbRef(db, "employees");
+      const snapshot = await get(employeesRef);
+
+      if (snapshot.exists()) {
+        const allEmployees = snapshot.val();
+
+        // employees are stored as numeric keys (0,1,2,…)
+        const found = Object.values(allEmployees).find(
+          (emp) => emp.email === email
+        );
+
+        if (found) {
+          setEmployeeId(found.id); // <-- use the "id" field inside employee object
+          fetchDocuments(found.id);
+        } else {
+          setMessage("Employee not found for this email.");
+        }
+      } else {
+        setMessage("No employees found in database.");
+      }
+    } catch (err) {
+      setMessage("Error fetching employeeId: " + err.message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch existing document metadata from Realtime Database
-  const fetchExistingDocs = async (empId) => {
-    setLoading(true);
+  // 2️⃣ Fetch documents for employeeId
+  const fetchDocuments = async (empId) => {
+    if (!empId) return;
     try {
-      if (!empId) {
-        throw new Error("Employee ID is required");
-      }
-
-      const docRef = dbRef(db, `documents/${empId}`);
-      const snapshot = await get(docRef);
-
+      const docsRef = dbRef(db, `documents/${empId}`);
+      const snapshot = await get(docsRef);
       if (snapshot.exists()) {
-        const employeeRecord = snapshot.val();
-        setExistingDocs(employeeRecord.files || {});
+        const data = snapshot.val();
+        setExistingDocs(data.files || {});
       } else {
         setExistingDocs({});
       }
-    } catch (error) {
-      setMessage("Failed to fetch existing documents: " + error.message);
-      setExistingDocs({});
-    } finally {
-      setLoading(false);
+    } catch (err) {
+      setMessage("Error fetching documents: " + err.message);
     }
   };
 
-  // Upload files to Firebase Storage and update metadata + password in backend
-  const uploadDocuments = async (useNewPassword = false) => {
-    setMessage("");
+  // Handle file input
+  const handleChange = (e) => {
+    setDocs((prev) => ({ ...prev, [e.target.name]: e.target.files[0] }));
+  };
 
-    if (!employeeId) {
-      setMessage("Employee ID is required");
+  // 3️⃣ Upload selected files to Storage and save metadata in DB
+  const uploadDocuments = async () => {
+    if (!employeeId || !employee?.email) {
+      setMessage("Cannot upload: employee not found.");
       return;
     }
 
-    if (useNewPassword) {
-      if (!newPassword) {
-        setMessage("Please enter a new password");
-        return;
-      }
-      if (!isStrongPassword(newPassword)) {
-        setMessage(
-          "Password must be 8+ characters with uppercase, lowercase, number, and special character"
-        );
-        return;
-      }
-    } else {
-      if (!password) {
-        setMessage("Please enter password");
-        return;
-      }
-    }
-
-    // Check all required docs exist either in new upload or already uploaded
-    for (const doc of requiredDocs) {
-      if (!docs[doc] && !existingDocs[doc]) {
-        setMessage(`Please upload required document: ${doc}`);
-        return;
-      }
-    }
-
     setLoading(true);
+    setMessage("");
 
     try {
-      // Upload new files to Firebase Storage, collect metadata
       const uploadedFiles = { ...existingDocs };
 
       for (const key of Object.keys(docs)) {
@@ -160,7 +111,9 @@ export default function EmployeeDocuments() {
 
         const fileExt = file.name.split(".").pop();
         const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-        const storagePath = `documents/${employeeId}/${key}_${Date.now()}.${fileExt}`;
+        const storagePath = `documents/${employeeId}/${key}_${Date.now()}.${
+          fileExt || "bin"
+        }`;
         const fileRef = storageRef(storage, storagePath);
 
         await uploadBytesResumable(fileRef, file);
@@ -171,33 +124,15 @@ export default function EmployeeDocuments() {
         };
       }
 
-      // Send metadata + password to backend as JSON (not FormData)
-      const resp = await fetch("/api/documents/create-password-and-upload", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          employeeId,
-          password: useNewPassword ? newPassword : password,
-          files: uploadedFiles,
-        }),
+      await set(dbRef(db, `documents/${employeeId}`), {
+        employeeId,
+        email: employee.email,
+        files: uploadedFiles,
       });
 
-      if (!resp.ok) {
-        const err = await resp.json();
-        throw new Error(err.error || "Failed to save data");
-      }
-
-      setIsNewUser(false);
-      setVerified(true);
-      if (useNewPassword) setPassword(newPassword);
-      setMessage(
-        useNewPassword
-          ? "Password set and documents uploaded successfully"
-          : "Documents uploaded successfully"
-      );
-
+      setMessage("Documents uploaded successfully.");
       setDocs({});
-      await fetchExistingDocs(employeeId);
+      setExistingDocs(uploadedFiles);
     } catch (error) {
       setMessage("Upload failed: " + error.message);
     } finally {
@@ -205,175 +140,88 @@ export default function EmployeeDocuments() {
     }
   };
 
-  // View document by fetching download URL from Firebase Storage
-  const viewDocument = async (docKey) => {
-    if (!employeeId) {
-      alert("Missing Employee ID");
-      return;
-    }
-
-    const fileMeta = existingDocs[docKey];
-    if (!fileMeta || !fileMeta.name) {
+  // 4️⃣ Instead of exposing Firebase URL, open our clean API endpoint
+  const viewDocument = (docKey) => {
+    if (!employeeId || !existingDocs[docKey]) {
       alert("No file available for this document.");
       return;
     }
 
-    try {
-      const fileRef = storageRef(storage, fileMeta.name);
-      const url = await getDownloadURL(fileRef);
-      window.open(url, "_blank");
-    } catch (error) {
-      alert("Error fetching document: " + error.message);
-      console.error("Firebase Storage error:", error);
-    }
+    // 🔗 Open your custom API endpoint, not Firebase URL
+    window.open(
+      `/api/documents/view?employeeId=${employeeId}&docKey=${docKey}`,
+      "_blank"
+    );
   };
 
   return (
     <div className="bg-gray-50 flex justify-center items-center p-4 min-h-screen">
       <div className="max-w-lg bg-white rounded shadow p-6 w-full">
-        <h2 className="text-2xl font-semibold mb-4">Employee Documents</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className="text-2xl font-semibold">Employee Documents</h2>
+          {employeeId && (
+            <span className="text-sm text-gray-600">ID: {employeeId}</span>
+          )}
+        </div>
 
-        {/* Step 1: Verify or create password */}
-        {!verified && !isNewUser && (
-          <>
-            <input
-              type="text"
-              placeholder="Employee ID"
-              className="w-full mb-3 p-2 border rounded"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value.trim())}
-              disabled={loading}
-            />
-            <input
-              type="password"
-              placeholder="Enter Password"
-              className="w-full mb-4 p-2 border rounded"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-            />
-            <button
-              onClick={verifyOrInitialize}
-              className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
-              disabled={loading}
+        {/* Documents Grid */}
+        <div className="grid gap-5">
+          {allDocKeys.map((doc) => (
+            <div
+              key={doc}
+              className="bg-gray-50 border rounded-lg p-4 shadow-sm flex flex-col gap-2"
             >
-              {loading ? "Verifying..." : "Verify"}
-            </button>
-          </>
-        )}
-
-        {/* Step 2: New user sets password and uploads */}
-        {isNewUser && (
-          <>
-            <input
-              type="text"
-              placeholder="Employee ID"
-              className="w-full mb-3 p-2 border rounded bg-gray-100 cursor-not-allowed"
-              value={employeeId}
-              disabled
-            />
-            <input
-              type="password"
-              placeholder="Create Strong Password"
-              className="w-full mb-4 p-2 border rounded"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-              disabled={loading}
-            />
-            {[...requiredDocs, ...optionalDocs].map((doc) => (
-              <div key={doc} className="mb-3">
-                <label className="block font-medium capitalize mb-1">
-                  {doc} {requiredDocs.includes(doc) && "*"}
-                </label>
-                <input
-                  type="file"
-                  name={doc}
-                  onChange={handleChange}
-                  disabled={loading}
-                />
-              </div>
-            ))}
-            <button
-              onClick={() => uploadDocuments(true)}
-              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 mt-4 transition"
-              disabled={loading}
-            >
-              {loading ? "Processing..." : "Set Password & Upload Documents"}
-            </button>
-          </>
-        )}
-
-        {/* Step 3: Verified user uploads and views docs */}
-        {verified && (
-          <>
-            <input
-              type="text"
-              placeholder="Employee ID"
-              className="w-full mb-3 p-2 border rounded bg-gray-100 cursor-not-allowed"
-              value={employeeId}
-              disabled
-            />
-            <input
-              type="password"
-              placeholder="Enter Password"
-              className="w-full mb-4 p-2 border rounded"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
-            />
-
-            <div className="grid gap-5">
-              {[...requiredDocs, ...optionalDocs].map((doc) => (
-                <div
-                  key={doc}
-                  className="bg-gray-50 border rounded-lg p-4 shadow-sm flex flex-col gap-2"
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="font-medium capitalize">
-                      {doc}{" "}
-                      {requiredDocs.includes(doc) && (
-                        <span className="text-red-500">*</span>
-                      )}
-                    </div>
-                    {existingDocs[doc] && (
-                      <button
-                        onClick={() => viewDocument(doc)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded shadow"
-                        disabled={loading}
-                      >
-                        View
-                      </button>
-                    )}
-                  </div>
-
-                  {existingDocs[doc] && (
-                    <div className="text-gray-500 text-sm italic">
-                      Uploaded: {existingDocs[doc]?.originalName || "Unknown file"}
-                    </div>
+              <div className="flex items-center justify-between">
+                <div className="font-medium capitalize">
+                  {doc}{" "}
+                  {requiredDocs.includes(doc) && (
+                    <span className="text-red-500">*</span>
                   )}
-
-                  <input
-                    type="file"
-                    name={doc}
-                    onChange={handleChange}
-                    className="text-sm"
-                    disabled={loading}
-                  />
                 </div>
-              ))}
+
+                {existingDocs[doc] ? (
+                  <button
+                    onClick={() => viewDocument(doc)}
+                    className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded"
+                    disabled={loading}
+                  >
+                    View
+                  </button>
+                ) : (
+                  <span className="text-xs text-gray-500">Not uploaded</span>
+                )}
+              </div>
+
+              {existingDocs[doc] && (
+                <div className="text-gray-500 text-sm italic">
+                  Uploaded: {existingDocs[doc]?.originalName || "Unknown file"}
+                </div>
+              )}
+
+              <input
+                type="file"
+                name={doc}
+                onChange={handleChange}
+                className="text-sm"
+                disabled={loading || !employeeId}
+              />
             </div>
+          ))}
+        </div>
 
-            <button
-              onClick={() => uploadDocuments(false)}
-              className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition"
-              disabled={loading}
-            >
-              {loading ? "Uploading..." : "Upload Documents"}
-            </button>
-          </>
+        <button
+          onClick={uploadDocuments}
+          className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition"
+          disabled={loading || !employeeId}
+        >
+          {loading ? "Uploading..." : "Upload Selected Files"}
+        </button>
+
+        {message && (
+          <p className="mt-4 text-center text-red-600 whitespace-pre-wrap">
+            {message}
+          </p>
         )}
-
-        {message && <p className="mt-4 text-center text-red-600">{message}</p>}
       </div>
     </div>
   );

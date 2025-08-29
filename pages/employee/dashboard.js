@@ -1,10 +1,11 @@
+
 "use client";
 import React, { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import getAttendanceSummary from "../../utils/attendanceUtils";
+import getAttendanceSummary, { getISTDateString } from "../../utils/attendanceUtils";
 import { UAParser } from "ua-parser-js";
 import { db } from "../../lib/firebase"; // ✅ import initialized DB
-import { ref, get } from "firebase/database"; // ✅ Import Firebase DB
+import { ref, get, query, orderByChild, equalTo } from "firebase/database"; // ✅ Firebase DB
 import ReminderModal from "@/components/ReminderModal";
 
 export default function Dashboard() {
@@ -12,18 +13,24 @@ export default function Dashboard() {
 
   const [summary, setSummary] = useState({
     present: 0,
+    absent: 0,
     half: 0,
     leave: 0,
     unpaidLeaves: 0,
     weekOff: 0,
     totalDays: 0,
     holidaysCount: 0,
+    paidLeavesUsed: 0,
+    paidHalfDaysUsed: 0,
+    unpaidHalfDays: 0,
   });
 
   const [emp, setEmp] = useState(null);
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
   const [holidays, setHolidays] = useState([]); // Store holidays for display if needed
+  const [weekOffSet, setWeekOffSet] = useState(new Set());
+  const [approvedLeavesSet, setApprovedLeavesSet] = useState(new Set());
 
   // Fetch holidays and return list for immediate use
   const fetchCompanyHolidays = async () => {
@@ -46,87 +53,164 @@ export default function Dashboard() {
     return [];
   };
 
- const fetchSummary = (email, holidaysList = []) => {
-  const now = new Date();
-  const month = now.getMonth();
-  const year = now.getFullYear();
-  const today = now.getDate();
+  // Fetch dynamic week offs for employee (by emp.id)
+  const fetchWeekOffs = async (employeeId) => {
+    if (!employeeId) return new Set();
+    try {
+      const weekOffRef = ref(db, `weekOff/${employeeId}`);
+      const snapshot = await get(weekOffRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val(); // { "yyyy-mm-dd": true, ... }
+        const s = new Set(Object.keys(data || {}));
+        setWeekOffSet(s);
+        return s;
+      }
+    } catch (e) {
+      console.error("Error fetching weekOffs:", e);
+    }
+    const empty = new Set();
+    setWeekOffSet(empty);
+    return empty;
+  };
 
-  fetch("/api/attendance/get")
-    .then(res => res.json())
-    .then(json => {
-      // Normalize date string to YYYY-MM-DD
-      const normalizeDate = (dateStr) => {
-        const d = new Date(dateStr);
-        const y = d.getFullYear();
-        const m = String(d.getMonth() + 1).padStart(2, "0");
-        const day = String(d.getDate()).padStart(2, "0");
-        return `${y}-${m}-${day}`;
-      };
+  // Fetch approved FULL-DAY leave requests for this employee (flat structure)
+  const fetchApprovedLeaves = async (email) => {
+    if (!email) return new Set();
+    try {
+      const leaveRef = ref(db, "leaveRequests");
+      const qLeaves = query(leaveRef, orderByChild("email"), equalTo(email));
+      const snapshot = await get(qLeaves);
 
-      // Filter company holidays for this month and year, only up to today
-      const monthHolidays = holidaysList.filter(h => {
-        const d = new Date(h.date);
-        return d.getMonth() === month && d.getFullYear() === year && d.getDate() <= today;
+      if (snapshot.exists()) {
+        const data = snapshot.val() || {};
+        const approved = Object.values(data)
+          .filter(
+            (leave) =>
+              leave.status === "approved" &&
+              (leave.type === "full-day" || !leave.type) // ignore half-day here
+          )
+          .map((leave) => leave.date);
+
+        const s = new Set(approved);
+        setApprovedLeavesSet(s);
+        return s;
+      }
+    } catch (e) {
+      console.error("Error fetching approved leaves:", e);
+    }
+    const empty = new Set();
+    setApprovedLeavesSet(empty);
+    return empty;
+  };
+
+  const fetchSummary = (email, holidaysList = [], weekOffSetParam = new Set(), approvedLeavesSetParam = new Set()) => {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    const today = now.getDate();
+
+    fetch("/api/attendance/get")
+      .then((res) => res.json())
+      .then((json) => {
+        // Normalize date string to YYYY-MM-DD
+        const normalizeDate = (dateStr) => {
+          const d = new Date(dateStr);
+          const y = d.getFullYear();
+          const m = String(d.getMonth() + 1).padStart(2, "0");
+          const day = String(d.getDate()).padStart(2, "0");
+          return `${y}-${m}-${day}`;
+        };
+
+        // Filter company holidays for this month and year, only up to today
+        const monthHolidays = holidaysList.filter((h) => {
+          const d = new Date(h.date);
+          return d.getMonth() === month && d.getFullYear() === year && d.getDate() <= today;
+        });
+
+        // Create a set of normalized holiday dates for quick lookup
+        const holidayDatesSet = new Set(monthHolidays.map((h) => normalizeDate(h.date)));
+
+        // Filter attendance records of this employee in this month and year (DO NOT filter out holidays here)
+        const employeeRecordsThisMonth = (json.data || []).filter((record) => {
+          if (!record?.email) return false;
+          if (record.email.toLowerCase() !== email.toLowerCase()) return false;
+          const recordDateObj = new Date(record.date);
+          return (
+            recordDateObj.getMonth() === month &&
+            recordDateObj.getFullYear() === year &&
+            recordDateObj.getDate() <= today
+          );
+        });
+
+        // Only keep weekOff/leave dates that fall in current month up to today
+        const filteredWeekOffSet = new Set(
+          Array.from(weekOffSetParam).filter((d) => {
+            const x = new Date(d);
+            return x.getMonth() === month && x.getFullYear() === year && x.getDate() <= today;
+          })
+        );
+
+        const filteredApprovedLeavesSet = new Set(
+          Array.from(approvedLeavesSetParam).filter((d) => {
+            const x = new Date(d);
+            return x.getMonth() === month && x.getFullYear() === year && x.getDate() <= today;
+          })
+        );
+
+        // Pass holidays + weekOff + approved leaves to getAttendanceSummary
+        const result = getAttendanceSummary(
+          employeeRecordsThisMonth,
+          month,
+          year,
+          today,
+          true,
+          email,
+          holidayDatesSet,
+          filteredWeekOffSet,
+          filteredApprovedLeavesSet
+        );
+
+        setSummary({
+          ...result,
+          totalDays: new Date(year, month + 1, 0).getDate(),
+          holidaysCount: monthHolidays.length, // exact count of company holidays
+        });
+      })
+      .catch((err) => {
+        console.error("Error fetching attendance or holidays:", err);
       });
-
-      // Create a set of normalized holiday dates for quick lookup
-      const holidayDatesSet = new Set(monthHolidays.map(h => normalizeDate(h.date)));
-
-      // Filter attendance records of this employee in this month and year (DO NOT filter out holidays here)
-      const employeeRecordsThisMonth = json.data.filter(record => {
-        if (record.email.toLowerCase() !== email.toLowerCase()) return false;
-        const recordDateObj = new Date(record.date);
-        return recordDateObj.getMonth() === month && recordDateObj.getFullYear() === year && recordDateObj.getDate() <= today;
-      });
-
-      // Pass holidays set to getAttendanceSummary so it skips leave on holidays
-      const result = getAttendanceSummary(employeeRecordsThisMonth, month, year, today, true, email, holidayDatesSet);
-
-      setSummary({
-        ...result,
-        totalDays: new Date(year, month + 1, 0).getDate(),
-        holidaysCount: monthHolidays.length,  // exact count of company holidays
-      });
-    })
-    .catch(err => {
-      console.error("Error fetching attendance or holidays:", err);
-    });
-};
-
-
+  };
 
   useEffect(() => {
     const storedEmp = JSON.parse(localStorage.getItem("employee"));
     if (!storedEmp?.email) return;
     setEmp(storedEmp);
 
-    // Fetch holidays first, then fetch summary with holidays list
-    fetchCompanyHolidays().then((holidaysList) => {
-      fetchSummary(storedEmp.email, holidaysList);
+    // Fetch holidays, weekOffs, and approved leaves, then compute summary
+    Promise.all([
+      fetchCompanyHolidays(),
+      fetchWeekOffs(storedEmp.id),           // dynamic week offs
+      fetchApprovedLeaves(storedEmp.email),  // approved leaves (full-day)
+    ]).then(([holidaysList, weekOffSetVal, approvedLeavesSetVal]) => {
+      fetchSummary(storedEmp.email, holidaysList, weekOffSetVal, approvedLeavesSetVal);
     });
   }, []);
 
-  const markAttendance = async (
-    fetchSummary,
-    setMessage,
-    setLoading,
-    router
-  ) => {
-    const emp = JSON.parse(localStorage.getItem("employee"));
+  const markAttendance = async (fetchSummaryFn, setMessageFn, setLoadingFn, routerInst) => {
+    const empLocal = JSON.parse(localStorage.getItem("employee"));
 
-    if (!emp) {
-      setMessage("❌ Employee data not found. Please log in again.");
+    if (!empLocal) {
+      setMessageFn("❌ Employee data not found. Please log in again.");
       return;
     }
 
-    if (!emp.password) {
-      setMessage("❌ Password missing. Please log in again.");
+    if (!empLocal.password) {
+      setMessageFn("❌ Password missing. Please log in again.");
       return;
     }
 
-    setLoading(true);
-    setMessage("");
+    setLoadingFn(true);
+    setMessageFn("");
 
     const parser = new UAParser();
     const result = parser.getResult();
@@ -191,10 +275,10 @@ export default function Dashboard() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name: emp.name,
-          email: emp.email,
-          number: emp.number,
-          password: emp.password,
+          name: empLocal.name,
+          email: empLocal.email,
+          number: empLocal.number,
+          password: empLocal.password,
           location: {
             latitude: coords.latitude,
             longitude: coords.longitude,
@@ -212,30 +296,27 @@ export default function Dashboard() {
       }
 
       if (!res.ok) {
-        setMessage(`❌ ${data.error || "Server error"}`);
+        setMessageFn(`❌ ${data.error || "Server error"}`);
       } else {
-        setMessage("✅ Attendance marked successfully!");
-        if (typeof fetchSummary === "function") {
-          fetchSummary(emp.email, holidays);
+        setMessageFn("✅ Attendance marked successfully!");
+        if (typeof fetchSummaryFn === "function") {
+          // Recompute summary using latest sets in state
+          fetchSummaryFn(empLocal.email, holidays, weekOffSet, approvedLeavesSet);
         }
         setTimeout(() => {
-          router.push("/employee/attendance");
+          routerInst.push("/employee/attendance");
         }, 1000);
       }
     } catch (err) {
       console.error("Attendance error:", err);
-      setMessage(`❌ ${err.message || "Something went wrong."}`);
+      setMessageFn(`❌ ${err.message || "Something went wrong."}`);
     } finally {
-      setLoading(false);
+      setLoadingFn(false);
     }
   };
 
   const now = new Date();
-  const totalDaysInMonth = new Date(
-    now.getFullYear(),
-    now.getMonth() + 1,
-    0
-  ).getDate();
+  const totalDaysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
 
   if (!emp) {
     return (
@@ -284,10 +365,8 @@ export default function Dashboard() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
           <StatCard title="Total Days in Month" value={summary.totalDays} />
-          <StatCard
-            title="Total Present"
-            value={summary.present + summary.half}
-          />
+          <StatCard title="Total Present" value={summary.present + summary.half} />
+          <StatCard title="Total Absent" value={summary.absent} />
           <StatCard title="Half Days" value={summary.half} />
           <StatCard title="Leaves" value={summary.leave} />
           <StatCard title="Week Offs" value={summary.weekOff} />

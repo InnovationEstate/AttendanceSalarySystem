@@ -228,6 +228,10 @@ export default function EmployeeAttendance() {
             <span>Present</span>
           </div>
           <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-red-600" />
+            <span>Absent</span>
+          </div>
+          <div className="flex items-center gap-1">
             <div className="w-3 h-3 rounded bg-yellow-500" />
             <span>Half Day</span>
           </div>

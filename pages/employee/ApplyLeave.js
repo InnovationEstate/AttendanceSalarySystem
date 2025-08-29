@@ -2,7 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { getDatabase, ref, push, query, orderByChild, equalTo, onValue } from "firebase/database";
+import { getDatabase, ref, push, query, orderByChild, equalTo, onValue, update, get } from "firebase/database";
 import { app } from "../../lib/firebase";
 
 export default function ApplyLeave() {
@@ -11,7 +11,7 @@ export default function ApplyLeave() {
   const [message, setMessage] = useState("");
   const [leaveList, setLeaveList] = useState([]);
   const [employee, setEmployee] = useState(null);
-  const [isSubmittingHalfDay, setIsSubmittingHalfDay] = useState(false); // To track half-day submission
+  const [isSubmittingHalfDay, setIsSubmittingHalfDay] = useState(false);
 
   useEffect(() => {
     const emp = JSON.parse(localStorage.getItem("employee"));
@@ -24,18 +24,13 @@ export default function ApplyLeave() {
   const fetchLeaveHistory = (email) => {
     const db = getDatabase(app);
     const leaveRef = ref(db, "leaveRequests");
-
-    // Query leave requests for this employee email
     const q = query(leaveRef, orderByChild("email"), equalTo(email));
 
     onValue(
       q,
       (snapshot) => {
         const data = snapshot.val() || {};
-        const leaves = Object.entries(data).map(([key, val]) => ({
-          id: key,
-          ...val,
-        }));
+        const leaves = Object.entries(data).map(([key, val]) => ({ id: key, ...val }));
         leaves.sort((a, b) => new Date(b.date) - new Date(a.date));
         setLeaveList(leaves);
       },
@@ -46,11 +41,46 @@ export default function ApplyLeave() {
     );
   };
 
+  const markHalfDayAttendance = async (email, leaveDate) => {
+    const db = getDatabase(app);
+
+    // Convert "." in email to "_" to match Firebase keys
+    const sanitizedEmail = email.replace(/\./g, "_");
+
+    const attendanceRef = ref(db, `attendance/${leaveDate}/${sanitizedEmail}`);
+
+    try {
+      // Half-day login time in IST: 14:00 (2 PM)
+      const istHalfDayLogin = new Date(`${leaveDate}T14:00:00.000+05:30`);
+      const utcHalfDayLogin = new Date(istHalfDayLogin.getTime() - istHalfDayLogin.getTimezoneOffset() * 60000);
+
+      const snapshot = await get(attendanceRef);
+
+      if (snapshot.exists()) {
+        // Update existing attendance
+        await update(attendanceRef, {
+          status: "half-day",
+          login: utcHalfDayLogin.toISOString(),
+          istLoginTime: istHalfDayLogin.toISOString(),
+        });
+      } else {
+        // Create new attendance record if none exists
+        await update(attendanceRef, {
+          status: "half-day",
+          login: utcHalfDayLogin.toISOString(),
+          istLoginTime: istHalfDayLogin.toISOString(),
+          logoutTime: "18:00",
+        });
+      }
+    } catch (error) {
+      console.error("Error updating half-day attendance:", error);
+    }
+  };
+
   const handleApply = async (halfDay = false) => {
     if (!employee) return setMessage("Employee not found.");
-
     if (!date) return setMessage("Please select a leave date.");
-    if (!reason && !halfDay) return setMessage("Please enter a reason."); // For half day, reason optional? You can tweak this
+    if (!reason && !halfDay) return setMessage("Please enter a reason.");
 
     setMessage("");
     if (halfDay) setIsSubmittingHalfDay(true);
@@ -58,11 +88,9 @@ export default function ApplyLeave() {
     const db = getDatabase(app);
     const leaveRef = ref(db, "leaveRequests");
 
-    // Check for duplicate leave for same date
     const q = query(leaveRef, orderByChild("email_date"), equalTo(`${employee.email}_${date}`));
     let duplicate = false;
 
-    // One-time read to check for duplicates
     await new Promise((resolve) => {
       onValue(
         q,
@@ -86,17 +114,22 @@ export default function ApplyLeave() {
       reason: reason || (halfDay ? "Half day leave" : ""),
       status: "pending",
       timestamp: new Date().toISOString(),
-      email_date: `${employee.email}_${date}`, // For quick duplicate checking
-      type: halfDay ? "half-day" : "full-day", // new field to indicate half/full day
+      email_date: `${employee.email}_${date}`,
+      type: halfDay ? "half-day" : "full-day",
     };
 
     try {
       await push(leaveRef, newLeave);
+
+      // Automatically mark half-day attendance if applied as half-day
+      if (halfDay) {
+        await markHalfDayAttendance(employee.email, date);
+      }
+
       setMessage(halfDay ? "Half day leave request submitted successfully." : "Leave request submitted successfully.");
       setDate("");
       setReason("");
       if (halfDay) setIsSubmittingHalfDay(false);
-      // fetchLeaveHistory updates automatically by onValue listener
     } catch (error) {
       console.error("Error submitting leave request:", error);
       setMessage("Failed to submit leave request.");
@@ -174,9 +207,7 @@ export default function ApplyLeave() {
               <div className="flex justify-between items-center mb-1">
                 <span className="font-medium text-gray-800">
                   {leave.date}{" "}
-                  {leave.type === "half-day" && (
-                    <span className="text-xs italic text-blue-700 ml-2">(Half Day)</span>
-                  )}
+                  {leave.type === "half-day" && <span className="text-xs italic text-blue-700 ml-2">(Half Day)</span>}
                 </span>
                 <span
                   className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -192,7 +223,7 @@ export default function ApplyLeave() {
               </div>
               <p className="text-gray-600 italic">{leave.reason}</p>
               {leave.status === "approved" && leave.type === "half-day" && (
-                <p className="text-blue-700 text-xs mt-1">✅ Half day leave approved and marked in your attendance.</p>
+                <p className="text-blue-700 text-xs mt-1">✅ Half day leave approved and attendance updated.</p>
               )}
               {leave.status === "approved" && leave.type !== "half-day" && (
                 <p className="text-green-700 text-xs mt-1">✅ Leave approved and marked in your attendance.</p>

@@ -1,7 +1,8 @@
+
 "use client";
 
 import React, { useEffect, useState } from "react";
-import { db } from "../../lib/firebase"; // Your Firebase client SDK instance
+import { db } from "../../lib/firebase";
 import { ref, get } from "firebase/database";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -13,6 +14,8 @@ export default function EmployeeSalary() {
   const [selectedMonth, setSelectedMonth] = useState(null);
   const [loading, setLoading] = useState(true);
   const [holidays, setHolidays] = useState([]); // store holidays list
+  const [weekOffSet, setWeekOffSet] = useState(new Set());
+  const [approvedLeavesSet, setApprovedLeavesSet] = useState(new Set());
 
   const now = new Date();
   const today = now.getDate();
@@ -29,7 +32,7 @@ export default function EmployeeSalary() {
           return;
         }
 
-        // 1. Fetch employees
+        // 1. Fetch employees and find full record
         const employeesSnap = await get(ref(db, "employees"));
         if (!employeesSnap.exists()) {
           setEmployee(null);
@@ -48,8 +51,14 @@ export default function EmployeeSalary() {
           setAttendance([]);
         } else {
           const attendanceObj = attendanceSnap.val();
-          const attendanceArr = Object.values(attendanceObj).flatMap((dateRecord) =>
-            Object.values(dateRecord)
+          const attendanceArr = Object.entries(attendanceObj).flatMap(([dateKey, dateRecord]) =>
+            Object.entries(dateRecord || {}).map(([userKey, rec]) => {
+              return {
+                ...rec,
+                date: dateKey,
+                email: rec.email || (rec.emailAddress && rec.emailAddress) || "",
+              };
+            })
           );
           setAttendance(attendanceArr);
         }
@@ -58,16 +67,52 @@ export default function EmployeeSalary() {
         const holidaysSnap = await get(ref(db, "companyHolidays"));
         if (holidaysSnap.exists()) {
           const data = holidaysSnap.val();
-          const holidaysList = Object.keys(data).map(date => date);
+          const holidaysList = Object.keys(data).map((date) => date);
           setHolidays(holidaysList);
         } else {
           setHolidays([]);
+        }
+
+        // 4. Fetch weekOffs
+        const empId = fullEmployee?.id || empLocal.id || null;
+        if (empId) {
+          const weekOffSnap = await get(ref(db, `weekOff/${empId}`));
+          if (weekOffSnap.exists()) {
+            const wData = weekOffSnap.val() || {};
+            const wSet = new Set(Object.keys(wData));
+            setWeekOffSet(wSet);
+          } else {
+            setWeekOffSet(new Set());
+          }
+        } else {
+          setWeekOffSet(new Set());
+        }
+
+        // 5. Fetch leaveRequests
+        const leaveSnap = await get(ref(db, "leaveRequests"));
+        if (leaveSnap.exists()) {
+          const leaveData = leaveSnap.val() || {};
+          const leavesArray = Object.values(leaveData);
+          const approvedDates = leavesArray
+            .filter(
+              (lr) =>
+                lr &&
+                String(lr.email || "").toLowerCase() === empLocal.email.toLowerCase() &&
+                lr.status === "approved" &&
+                (lr.type === "full-day" || !lr.type)
+            )
+            .map((lr) => lr.date);
+          setApprovedLeavesSet(new Set(approvedDates));
+        } else {
+          setApprovedLeavesSet(new Set());
         }
       } catch (error) {
         console.error("Error fetching data:", error);
         setEmployee(null);
         setAttendance([]);
         setHolidays([]);
+        setWeekOffSet(new Set());
+        setApprovedLeavesSet(new Set());
       } finally {
         setLoading(false);
       }
@@ -89,29 +134,43 @@ export default function EmployeeSalary() {
   }
 
   const monthlySalary = Number(employee.salary) || 0;
-
   const monthToShow = selectedMonth !== null ? selectedMonth : currentMonth;
-
   const totalDaysInMonth = new Date(currentYear, monthToShow + 1, 0).getDate();
+  const attendanceDaysCount = monthToShow === currentMonth ? today : totalDaysInMonth;
 
-  const attendanceDaysCount =
-    monthToShow === currentMonth ? today : totalDaysInMonth;
-
-  // Create a Set of holidays for quick lookup
   const holidayDatesSet = new Set(
-    holidays.filter(dateStr => {
+    holidays.filter((dateStr) => {
       const d = new Date(dateStr);
       return d.getMonth() === monthToShow && d.getFullYear() === currentYear;
     })
   );
 
-  // Pass holidayDatesSet to attendance summary
-  const {
+  const filteredWeekOffSet = new Set(
+    Array.from(weekOffSet).filter((d) => {
+      const x = new Date(d);
+      return x.getMonth() === monthToShow && x.getFullYear() === currentYear && x.getDate() <= attendanceDaysCount;
+    })
+  );
+
+  const filteredApprovedLeavesSet = new Set(
+    Array.from(approvedLeavesSet).filter((d) => {
+      const x = new Date(d);
+      return x.getMonth() === monthToShow && x.getFullYear() === currentYear && x.getDate() <= attendanceDaysCount;
+    })
+  );
+
+  // Attendance Summary
+  let {
     present,
     half,
     leave,
+    absent,
     unpaidLeaves,
+    paidLeavesUsed,
+    paidHalfDaysUsed,
     unpaidHalfDays,
+    weekOff,
+    detailedDays,
   } = getAttendanceSummary(
     attendance,
     monthToShow,
@@ -119,77 +178,68 @@ export default function EmployeeSalary() {
     attendanceDaysCount,
     true,
     employee.email,
-    holidayDatesSet
+    holidayDatesSet,
+    filteredWeekOffSet,
+    filteredApprovedLeavesSet
   );
 
-  const attendanceExists = present + half > 0;
+  // --- NEW LOGIC: 1 absent auto-paid if no paid leave used ---
+  if (absent > 0 && paidLeavesUsed === 0) {
+    absent -= 1;
+    paidLeavesUsed += 1;
+  }
 
   const perDaySalary = monthlySalary / totalDaysInMonth;
-
   const daysCounted = attendanceDaysCount;
 
-  // Count how many holidays fall within counted days in this month
-  const holidaysCount = holidays.filter(dateStr => {
+  const holidaysCount = holidays.filter((dateStr) => {
     const d = new Date(dateStr);
     const day = d.getDate();
-    return (
-      d.getMonth() === monthToShow &&
-      d.getFullYear() === currentYear &&
-      day <= attendanceDaysCount
-    );
+    return d.getMonth() === monthToShow && d.getFullYear() === currentYear && day <= daysCounted;
   }).length;
 
-  let grossSalaryTillToday = 0;
-  let totalDeduction = 0;
-  let netSalary = 0;
+  const grossSalaryTillToday = perDaySalary * daysCounted;
 
-  if (attendanceExists) {
-    grossSalaryTillToday = perDaySalary * daysCounted;
+  const totalDeduction =
+    (unpaidLeaves + absent) * perDaySalary + unpaidHalfDays * 0.5 * perDaySalary;
 
-    // Adjust deduction by excluding paid holidays (no deduction for holidays)
-    totalDeduction =
-      unpaidLeaves * perDaySalary + unpaidHalfDays * 0.5 * perDaySalary;
-
-    // No deduction for holidays, so gross salary includes holidays fully
-
-    netSalary = grossSalaryTillToday - totalDeduction;
-  }
+  const netSalary = grossSalaryTillToday - totalDeduction;
 
   const generatePDFForMonth = (monthIndex) => {
     const selectedDate = new Date(currentYear, monthIndex, 1);
-    const totalDaysInSelectedMonth = new Date(
-      currentYear,
-      monthIndex + 1,
-      0
-    ).getDate();
-
-    const pdfAttendanceDaysCount =
-      monthIndex === currentMonth ? today : totalDaysInSelectedMonth;
-
-    // Filter holidays for selected month and days counted
-    const pdfHolidaysCount = holidays.filter(dateStr => {
-      const d = new Date(dateStr);
-      const day = d.getDate();
-      return (
-        d.getMonth() === monthIndex &&
-        d.getFullYear() === currentYear &&
-        day <= pdfAttendanceDaysCount
-      );
-    }).length;
+    const totalDaysInSelectedMonth = new Date(currentYear, monthIndex + 1, 0).getDate();
+    const pdfAttendanceDaysCount = monthIndex === currentMonth ? today : totalDaysInSelectedMonth;
 
     const holidayDatesSetForPDF = new Set(
-      holidays.filter(dateStr => {
+      holidays.filter((dateStr) => {
         const d = new Date(dateStr);
         return d.getMonth() === monthIndex && d.getFullYear() === currentYear;
       })
     );
 
-    const {
-      present,
-      half,
-      leave,
-      unpaidLeaves,
-      unpaidHalfDays,
+    const filteredWeekOffForPDF = new Set(
+      Array.from(weekOffSet).filter((d) => {
+        const x = new Date(d);
+        return x.getMonth() === monthIndex && x.getFullYear() === currentYear && x.getDate() <= pdfAttendanceDaysCount;
+      })
+    );
+
+    const filteredApprovedLeavesForPDF = new Set(
+      Array.from(approvedLeavesSet).filter((d) => {
+        const x = new Date(d);
+        return x.getMonth() === monthIndex && x.getFullYear() === currentYear && x.getDate() <= pdfAttendanceDaysCount;
+      })
+    );
+
+    let {
+      present: pdfPresent,
+      half: pdfHalf,
+      leave: pdfLeave,
+      absent: pdfAbsent,
+      unpaidLeaves: pdfUnpaidLeaves,
+      unpaidHalfDays: pdfUnpaidHalfDays,
+      weekOff: pdfWeekOff,
+      paidLeavesUsed: pdfPaidLeavesUsed,
     } = getAttendanceSummary(
       attendance,
       monthIndex,
@@ -197,36 +247,36 @@ export default function EmployeeSalary() {
       pdfAttendanceDaysCount,
       true,
       employee.email,
-      holidayDatesSetForPDF
+      holidayDatesSetForPDF,
+      filteredWeekOffForPDF,
+      filteredApprovedLeavesForPDF
     );
 
-    const attendanceExistsForPDF = present + half > 0;
+    // --- Apply same absent-to-paid rule in PDF ---
+    if (pdfAbsent > 0 && pdfPaidLeavesUsed === 0) {
+      pdfAbsent -= 1;
+      pdfPaidLeavesUsed += 1;
+    }
 
     const perDay = monthlySalary / totalDaysInSelectedMonth;
-
-    const gross = attendanceExistsForPDF ? perDay * pdfAttendanceDaysCount : 0;
-    const deduction = attendanceExistsForPDF
-      ? unpaidLeaves * perDay + unpaidHalfDays * 0.5 * perDay
-      : 0;
+    const gross = perDay * pdfAttendanceDaysCount;
+    const deduction = (pdfUnpaidLeaves + pdfAbsent) * perDay + pdfUnpaidHalfDays * 0.5 * perDay;
     const net = gross - deduction;
 
     const doc = new jsPDF();
-    const monthStr = selectedDate.toLocaleString("default", {
-      month: "long",
-      year: "numeric",
-    });
+    const monthStr = selectedDate.toLocaleString("default", { month: "long", year: "numeric" });
 
     doc.setFontSize(18);
     doc.text("Innovation Estate", 14, 20);
     doc.setFontSize(12);
-    doc.text(`Salary Slip`, 14, 30);
+    doc.text("Salary Slip", 14, 30);
     doc.text(`Month: ${monthStr}`, 14, 36);
     doc.text(`Employee: ${employee.name}`, 14, 42);
     doc.text(`Email: ${employee.email}`, 14, 48);
     doc.text(`Employee ID: ${employee.id}`, 14, 54);
 
     autoTable(doc, {
-      startY: 55,
+      startY: 60,
       theme: "striped",
       head: [["Description", "Value"]],
       body: [
@@ -234,12 +284,16 @@ export default function EmployeeSalary() {
         ["Days Counted", `${pdfAttendanceDaysCount}`],
         ["Per Day Salary", `${perDay.toFixed(2)}`],
         ["Gross Salary", `${gross.toFixed(2)}`],
-        ["Leave Days (1 Paid)", leave],
-        ["Half Days", half],
-        ["Unpaid Leaves", unpaidLeaves],
+        ["Present Days", pdfPresent],
+        ["Half Days", pdfHalf],
+        ["Week Offs", pdfWeekOff],
+        ["Paid Leaves (used)", pdfPaidLeavesUsed],
+        ["Unpaid Leaves", pdfUnpaidLeaves],
+        ["Absents", pdfAbsent],
+        ["Unpaid Half Days", pdfUnpaidHalfDays],
         ["Total Deduction", `${deduction.toFixed(2)}`],
         ["Net Salary", `${net.toFixed(2)}`],
-        ["Paid Holidays", pdfHolidaysCount], // new row for holidays
+        ["Paid Holidays", holidayDatesSetForPDF.size],
       ],
     });
 
@@ -252,18 +306,12 @@ export default function EmployeeSalary() {
         <select
           className="border border-gray-300 rounded px-2 py-1 bg-white shadow-sm text-sm"
           value={selectedMonth ?? ""}
-          onChange={(e) =>
-            setSelectedMonth(
-              e.target.value === "" ? null : Number(e.target.value)
-            )
-          }
+          onChange={(e) => setSelectedMonth(e.target.value === "" ? null : Number(e.target.value))}
         >
           <option value="">Select Month</option>
           {[...Array(currentMonth + 1).keys()].map((m) => (
             <option key={m} value={m}>
-              {new Date(currentYear, m).toLocaleString("default", {
-                month: "long",
-              })}
+              {new Date(currentYear, m).toLocaleString("default", { month: "long" })}
             </option>
           ))}
         </select>
@@ -278,55 +326,54 @@ export default function EmployeeSalary() {
       </div>
 
       <div className="max-w-2xl mx-auto bg-white rounded-lg shadow p-4">
-        <h2 className="text-xl sm:text-2xl font-bold text-center text-blue-700 mb-4">
-          Salary Slip
-        </h2>
+        <h2 className="text-xl sm:text-2xl font-bold text-center text-blue-700 mb-4">Salary Slip</h2>
 
         <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-6">
           <div>Month:</div>
           <div className="font-semibold">
-            {new Date(currentYear, monthToShow).toLocaleString("default", {
-              month: "long",
-              year: "numeric",
-            })}
+            {new Date(currentYear, monthToShow).toLocaleString("default", { month: "long", year: "numeric" })}
           </div>
 
           <div>Monthly Salary:</div>
-          <div className="font-semibold text-blue-700">
-            ₹ {monthlySalary.toFixed(2)}
-          </div>
+          <div className="font-semibold text-blue-700">₹ {monthlySalary.toFixed(2)}</div>
 
-          <div>
-            {selectedMonth === currentMonth
-              ? "Days Till Today:"
-              : "Days in Month:"}
-          </div>
+          <div>{selectedMonth === currentMonth ? "Days Till Today:" : "Days in Month:"}</div>
           <div className="font-semibold">{daysCounted}</div>
 
           <div>Per Day Salary:</div>
           <div className="font-semibold">₹ {perDaySalary.toFixed(2)}</div>
 
-          <div>Total Leave:</div>
-          <div className="text-red-600 font-semibold">{leave} (1 Paid)</div>
+          <div>Present:</div>
+          <div className="font-semibold text-green-700">{present}</div>
 
-          <div>Unpaid Leaves:</div>
-          <div className="font-semibold text-red-700">{unpaidLeaves}</div>
+          <div>Absents:</div>
+          <div className="font-semibold text-red-700">{absent}</div>
 
           <div>Half Days:</div>
-          <div className="text-orange-600 font-semibold">{half} </div>
+          <div className="font-semibold text-orange-600">{half}</div>
+
+          {/* <div>Week Offs:</div>
+          <div className="font-semibold text-gray-600">{weekOff}</div> */}
+
+          <div>Paid Leaves Used:</div>
+          <div className="font-semibold text-blue-600">{paidLeavesUsed}</div>
+
+          <div>Unpaid Leaves:</div>
+          <div className="font-semibold text-red-600">{unpaidLeaves}</div>
+
+          {/* <div>Unpaid Half Days:</div>
+          <div className="font-semibold text-red-500">{unpaidHalfDays}</div> */}
+
+          
 
           <div>Total Deduction:</div>
-          <div className="font-semibold text-red-600">
-            ₹ {totalDeduction.toFixed(2)}
-          </div>
+          <div className="font-semibold text-red-600">₹ {totalDeduction.toFixed(2)}</div>
 
-          <div> Holidays:</div>
+          <div>Holidays:</div>
           <div className="text-green-600 font-semibold">{holidaysCount}</div>
 
           <div className="text-base font-semibold">Net Salary:</div>
-          <div className="text-green-700 text-base font-bold">
-            ₹ {netSalary.toFixed(2)}
-          </div>
+          <div className="text-green-700 text-base font-bold">₹ {netSalary.toFixed(2)}</div>
         </div>
 
         <div className="text-center">

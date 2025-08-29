@@ -555,9 +555,10 @@ function EmployeeCalendarAdmin({ email, name }) {
     );
 
   let finalStatus = status;
-
+  let holidayReason = null;
   if (holidaysObj[dateStr]) {
     finalStatus = "CH";
+    holidayReason = holidaysObj[dateStr].reason;
   } 
   else if (new Date(dateStr).getDay() === 2) {
     // 0 = Sunday, 1 = Monday, 2 = Tuesday ...
@@ -585,6 +586,7 @@ function EmployeeCalendarAdmin({ email, name }) {
     key: `day-${day}`,
     day,
     status: finalStatus,
+    holidayReason,
     date: dateStr,
     loginRecord,
     isToday: isCurrentMonth && day === today,
@@ -617,11 +619,12 @@ function EmployeeCalendarAdmin({ email, name }) {
     fetchAttendance(month);
   };
 
-  const handleDayClick = (date, status, record) => {
+  const handleDayClick = (date, status, record, holidayReason) => {
     if (!date) return;
     setSelectedDate(date);
     setSelectedStatus(status);
     setEmployeeData(record || { email, name, number: "" });
+    setHolidayReason(holidayReason);
     setModalOpen(true);
   };
 
@@ -690,6 +693,13 @@ function EmployeeCalendarAdmin({ email, name }) {
                   <span>Status:</span>
                   <span className="font-semibold">{status}</span>
                 </div>
+                {/* Show holiday reason only if status is CH */}
+                {status === "CH" && holidayReason && (
+                  <div className="flex justify-between mt-1">
+                    <span>Holiday:</span>
+                    <span className="font-semibold">{holidayReason}</span>
+                  </div>
+                )}
                 {loginRecord?.login && (
                   <div className="flex justify-between mt-1">
                     <span>Time:</span>
