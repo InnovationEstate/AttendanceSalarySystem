@@ -8,35 +8,47 @@ import "react-toastify/dist/ReactToastify.css";
 
 export default function EmployeeProfile() {
   const [employee, setEmployee] = useState(null);
+  const [employeeId, setEmployeeId] = useState(null);
   const [birthday, setBirthday] = useState("");
-  const [documents, setDocuments] = useState(null); // 👈 new state
+  const [documents, setDocuments] = useState(null);
   const router = useRouter();
 
-  // Logged-in employeeId from localStorage
-  const employeeId =
-    typeof window !== "undefined" ? localStorage.getItem("employeeId") : null;
+  // Logged-in email from localStorage
+  const email = typeof window !== "undefined" ? localStorage.getItem("email") : null;
 
   useEffect(() => {
-    if (!employeeId) return;
+    if (!email) return;
+
+    let cancelled = false;
 
     const fetchEmployee = async () => {
       try {
-        // fetch employee info
-        const snap = await get(ref(db, `employees/${employeeId}`));
-        if (snap.exists()) {
-          setEmployee(snap.val());
-        }
+        // 1️⃣ Fetch all employees and find the one with matching email
+        const snap = await get(ref(db, "employees"));
+        const employeesData = snap.val();
+        if (!employeesData) return;
 
-        // fetch birthday from birthdays DB
-        const birthdaySnap = await get(ref(db, `birthdays/${employeeId}`));
+        const empEntry = Object.entries(employeesData).find(
+          ([id, emp]) => emp.email === email
+        );
+        if (!empEntry) return;
+
+        const [id, emp] = empEntry;
+        if (cancelled) return;
+
+        setEmployee(emp);
+        setEmployeeId(id);
+
+        // 2️⃣ Fetch birthday
+        const birthdaySnap = await get(ref(db, `birthdays/${id}`));
         if (birthdaySnap.exists()) {
-          setBirthday(birthdaySnap.val().birthday || "");
+          setBirthday(birthdaySnap.val()?.birthday || "");
         }
 
-        // fetch documents from documents DB 👇
-        const docSnap = await get(ref(db, `documents/${employeeId}`));
+        // 3️⃣ Fetch documents
+        const docSnap = await get(ref(db, `documents/${id}`));
         if (docSnap.exists()) {
-          setDocuments(docSnap.val().files || null);
+          setDocuments(docSnap.val()?.files || null);
         }
       } catch (error) {
         console.error("Error fetching employee profile:", error);
@@ -45,7 +57,11 @@ export default function EmployeeProfile() {
     };
 
     fetchEmployee();
-  }, [employeeId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [email]);
 
   const handleSave = async () => {
     if (!birthday) {
@@ -53,8 +69,13 @@ export default function EmployeeProfile() {
       return;
     }
 
+    if (!employeeId) {
+      toast.error("Employee not found.");
+      return;
+    }
+
     try {
-      // Save birthday in a separate birthdays DB
+      // Save birthday in database
       await set(ref(db, `birthdays/${employeeId}`), {
         employeeId,
         birthday,
@@ -72,7 +93,7 @@ export default function EmployeeProfile() {
     }
   };
 
-  if (!employeeId) {
+  if (!email) {
     return (
       <div className="p-6 text-center">
         <p className="text-red-500">No employee logged in.</p>
@@ -102,7 +123,7 @@ export default function EmployeeProfile() {
         />
       </div>
 
-      {/* Documents Section 👇 */}
+      {/* Documents Section */}
       {documents && (
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-2">Documents</h3>

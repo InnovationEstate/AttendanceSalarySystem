@@ -77,6 +77,9 @@ export default function EmployeeAttendance() {
     summary.detailedDays.forEach(({ day, status }) => {
       const dateStr = getISTDateString(currentYear, targetMonth, day);
 
+    // Normalize leave
+  if (status.toLowerCase().includes("leave")) status = "Leave";      
+
       // If it's a company holiday
       if (holidaysObj[dateStr]) {
         calendarData.push({
@@ -97,7 +100,7 @@ export default function EmployeeAttendance() {
         calendarData.push({
           key: `day-${day}`,
           day,
-          status,
+          status: loginRecord?.status ? (loginRecord.status.toLowerCase().includes("leave") ? "Leave" : loginRecord.status) : status,
           date: dateStr,
           loginTime: loginRecord?.login,
           isToday: isCurrentMonth && day === today,
@@ -199,6 +202,7 @@ export default function EmployeeAttendance() {
                       </span>
                     </div>
                   )}
+                  
                   {loginTime && (
                     <div className="flex justify-between mt-1">
                       <span>Time:</span>

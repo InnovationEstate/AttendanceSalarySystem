@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { db } from "../../lib/firebase";
-import { ref, onValue, get, child, update } from "firebase/database";
+import { ref, onValue, get, child, update ,remove,set} from "firebase/database";
 import getAttendanceSummary, {
   getISTDateString,
 } from "../../utils/attendanceUtils";
@@ -15,45 +15,55 @@ export default function AdminAttendance() {
   const [attendanceData, setAttendanceData] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [holidays, setHolidays] = useState({});
+  const [weekoffs, setWeekoffs] = useState({});
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
 
+  // ---- FETCH EMPLOYEES, HOLIDAYS, WEEKOFFS ----
   useEffect(() => {
-    // Employees
     const empRef = ref(db, "employees");
     const unsubEmp = onValue(empRef, (snapshot) => {
       const data = snapshot.val();
       setEmployees(data ? Object.values(data) : []);
     });
 
-    // Holidays
     const holRef = ref(db, "companyHolidays");
     const unsubHol = onValue(holRef, (snapshot) => {
       const data = snapshot.val();
       setHolidays(data || {});
     });
 
+    const weekRef = ref(db, "weekoffs");
+    const unsubWeek = onValue(weekRef, (snapshot) => {
+      const data = snapshot.val();
+      setWeekoffs(data || {});
+    });
+
     return () => {
       unsubEmp();
       unsubHol();
+      unsubWeek();
     };
   }, []);
 
+  // ---- FETCH ATTENDANCE FOR SELECTED DATE ----
   useEffect(() => {
     if (!selectedDate) return;
-    // Attendance for selected date (table view)
     const attRef = ref(db, `attendance/${selectedDate}`);
     const unsubAtt = onValue(attRef, (snapshot) => {
       const data = snapshot.val();
       const formatted = data
-        ? Object.entries(data).map(([email, value]) => ({ email, ...value }))
+        ? Object.entries(data).map(([email, value]) => ({
+            email,
+            ...value,
+          }))
         : [];
       setAttendanceData(formatted);
     });
-
     return () => unsubAtt();
   }, [selectedDate]);
 
+  // ---- HELPERS ----
   function getTodayDate() {
     const now = new Date();
     return now.toISOString().split("T")[0];
@@ -97,6 +107,7 @@ export default function AdminAttendance() {
     );
   }
 
+  // ---- LOGIC: HOLIDAY / WEEKOFF / ATTENDANCE ----
   const isHoliday = holidays[selectedDate] !== undefined;
   const holidayReason = isHoliday ? holidays[selectedDate].reason : "";
 
@@ -104,26 +115,30 @@ export default function AdminAttendance() {
     employees.map((emp) => [(emp.email || "").toLowerCase(), emp])
   );
 
-  const presentEmployees = attendanceData
-  .filter((att) => att.login)
-  .map((att) => {
+  const presentEmployees = attendanceData.map((att) => {
     const email = (att.email || "").toLowerCase();
     const emp = employeeMap.get(email) || {};
-
-    // Parse login time
-    const loginDate = new Date(att.login);
-    const hour = loginDate.getHours();
-    const minute = loginDate.getMinutes();
 
     let status = "Present";
 
     if (isHoliday) {
       status = `Holiday (${holidayReason})`;
-    } else if (att.leave) {
-      // mark directly as leave if leave applied
+    } else if (att.status === "Leave") {
       status = "Leave";
-    } else if (hour > 11 || (hour === 11 && minute > 0)) {
+    } else if (att.status === "Week Off") {
+      status = "Week Off";
+    } else if (att.status === "Absent") {
+      status = "Absent";
+    } else if (att.status === "Half Day") {
       status = "Half Day";
+    } else if (att.login) {
+      // derive from login time if not set
+      const loginDate = new Date(att.login);
+      const hour = loginDate.getHours();
+      const minute = loginDate.getMinutes();
+      if (hour > 11 || (hour === 11 && minute > 0)) {
+        status = "Half Day";
+      }
     }
 
     return {
@@ -141,34 +156,39 @@ export default function AdminAttendance() {
     };
   });
 
-// Employees who didn't login that day
-const fallbackEmployees = employees
-  .filter((emp) => {
-    const email = (emp.email || "").toLowerCase();
-    return !presentEmployees.some((pe) => pe.email.toLowerCase() === email);
-  })
-  .map((emp) => {
-    let status;
-    if (isHoliday) {
-      status = `Holiday (${holidayReason})`;
-    } else if (emp.leave) {
-      status = "Leave";
-    } else {
-      const dow = new Date(selectedDate).getDay();
-      status = dow === 2 ? "Week Off" : "Absent"; // Tuesday = Week Off
-    }
-    return {
-      id: emp.id || "N/A",
-      name: emp.name || "N/A",
-      email: emp.email || "N/A",
-      designation: emp.designation || "N/A",
-      loginTime: "",
-      location: null,
-      status,
-    };
-  });
+  const fallbackEmployees = employees
+    .filter((emp) => {
+      const email = (emp.email || "").toLowerCase();
+      return !presentEmployees.some((pe) => pe.email.toLowerCase() === email);
+    })
+    .map((emp) => {
+      let status;
+      if (isHoliday) {
+        status = `Holiday (${holidayReason})`;
+      } else {
+        const dateKey = selectedDate;
+        const empId = emp.id;
+        // ✅ Weekoff priority: DB entry > fallback Tuesday
+        if (weekoffs[empId] && weekoffs[empId][dateKey]) {
+          status = "Week Off";
+        } else if (new Date(selectedDate).getDay() === 2) {
+          status = "Week Off";
+        } else {
+          status = "Absent";
+        }
+      }
+      return {
+        id: emp.id || "N/A",
+        name: emp.name || "N/A",
+        email: emp.email || "N/A",
+        designation: emp.designation || "N/A",
+        loginTime: "",
+        location: null,
+        status,
+      };
+    });
 
-
+  // ---- EXPORT ----
   function exportExcel(data, fileName) {
     const worksheet = XLSX.utils.json_to_sheet(data);
     const workbook = XLSX.utils.book_new();
@@ -193,6 +213,7 @@ const fallbackEmployees = employees
     alert("Monthly export not supported in this real-time view.");
   }
 
+  // ---- RENDER ----
   return (
     <main className="p-4 sm:p-6 bg-gray-100 min-h-screen text-xs sm:text-sm md:text-base">
       {/* Header */}
@@ -337,13 +358,12 @@ function AttendanceModal({
   currentStatus,
 }) {
   const [status, setStatus] = useState(currentStatus || "");
-  const [loginTime, setLoginTime] = useState(""); // HH:MM input
+  const [loginTime, setLoginTime] = useState("");
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     setStatus(currentStatus || "");
 
-    // Pre-fill login time if record exists
     if (employeeData?.login) {
       const d = new Date(employeeData.login);
       const istTime = new Date(
@@ -359,72 +379,79 @@ function AttendanceModal({
 
   if (!isOpen || !employeeData) return null;
 
- const handleSave = async () => {
-  if (!employeeData) return;
+  const handleSave = async () => {
+    if (!employeeData) return;
 
-  setLoading(true);
-  try {
-    const updates = {};
-    const dateKey = selectedDate;
-    const empKey = employeeData.email.replace(/\./g, "_");
+    setLoading(true);
+    try {
+      const dateKey = selectedDate;
+      const empKey = employeeData.email.replace(/\./g, "_");
+      const empRef = ref(db, `attendance/${dateKey}/${empKey}`);
 
-    let finalStatus = status; // manual selection from frontend
-    let loginDate = null;
-
-    if (loginTime) {
-      // Build IST datetime from selectedDate + loginTime
-      const [hours, minutes] = loginTime.split(":").map(Number);
-      loginDate = new Date(`${selectedDate}T${loginTime}:00+05:30`); // IST
-
-      // Auto-determine status only if not manually set to Week Off, Leave, or Half Day
-      if (!["Week Off", "Leave", "Half Day"].includes(finalStatus)) {
-        if (hours < 9 || (hours === 9 && minutes < 30)) {
-          finalStatus = "Present";
-        } else if (hours < 11 || (hours === 11 && minutes === 0)) {
-          finalStatus = "Present";
-        } else {
-          finalStatus = "Half Day";
-        }
+      // ✅ CASE 1: Absent → remove entry
+      if (status === "Absent") {
+        await remove(empRef);
+        toast.success("Attendance removed (Absent) ✅");
+        onClose();
+        return;
       }
-    } else {
-      // No login time → fallback
-      if (!["Leave", "Week Off"].includes(finalStatus)) {
-        finalStatus = "Absent";
-      }
-    }
 
-    // Save login times **only** for Present or Half Day
-    const shouldKeepLogin = finalStatus === "Present" || finalStatus === "Half Day";
-
-    updates[`attendance/${dateKey}/${empKey}`] = {
-      name: employeeData.name,
-      email: employeeData.email,
-      number: employeeData.number || "",
-      device: employeeData.device || "",
-      location: employeeData.location || "",
-      login: shouldKeepLogin ? loginDate?.toISOString() || null : null,
-      istLoginTime: shouldKeepLogin
-        ? loginDate?.toLocaleTimeString("en-IN", {
-            hour: "2-digit",
-            minute: "2-digit",
-            hour12: true,
-            timeZone: "Asia/Kolkata",
-          }) || null
-        : null,
-      status: finalStatus,
-    };
-
-    await update(ref(db), updates);
-    toast.success("Attendance updated ✅");
-    onClose();
-  } catch (error) {
-    console.error("Error updating attendance:", error);
-    toast.error("Failed to update attendance ❌");
-  } finally {
-    setLoading(false);
+      // ✅ CASE 2: Present / Half Day
+if (["Present", "Half Day"].includes(status)) {
+  let loginDate = null;
+  if (loginTime) {
+    loginDate = new Date(`${selectedDate}T${loginTime}:00+05:30`); // IST
   }
-};
 
+  const record = {
+    name: employeeData.name,
+    email: employeeData.email,
+    number: employeeData.number || "",
+    date: dateKey,
+    device: employeeData.device || "",
+    location: employeeData.location || "",
+    login: loginDate ? loginDate.toISOString() : null, // UTC ISO
+    istLoginTime: loginDate
+      ? new Date(
+          loginDate.getTime() - loginDate.getTimezoneOffset() * 60000
+        ).toISOString() // ✅ ISO in IST
+      : null,
+    status,
+  };
+
+  await set(empRef, record);
+  toast.success("Attendance updated ✅");
+  onClose();
+  return;
+}
+
+
+      // ✅ CASE 3: Leave / Week Off (store without login)
+      if (["Leave", "Week Off"].includes(status)) {
+        const record = {
+          name: employeeData.name,
+          email: employeeData.email,
+          number: employeeData.number || "",
+          device: employeeData.device || "",
+          location: employeeData.location || "",
+          date: dateKey,
+          login: null,
+          istLoginTime: null,
+          status,
+        };
+
+        await set(empRef, record);
+        toast.success("Attendance updated ✅");
+        onClose();
+        return;
+      }
+    } catch (error) {
+      console.error("Error updating attendance:", error);
+      toast.error("Failed to update attendance ❌");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/60 bg-opacity-50 z-50">
@@ -444,10 +471,10 @@ function AttendanceModal({
           <option value="Half Day">Half Day</option>
           <option value="Absent">Absent</option>
           <option value="Leave">Leave</option>
-          <option value="Week Off">Week Off</option>
+          {/* <option value="Week Off">Week Off</option> */}
         </select>
 
-        {/* Only show time input for Present/Half Day */}
+        {/* Time input only for Present/Half Day */}
         {["Present", "Half Day"].includes(status) && (
           <input
             type="time"
@@ -473,11 +500,7 @@ function AttendanceModal({
             {loading ? "Saving..." : "Save"}
           </button>
         </div>
-
-        
       </div>
-
-      
     </div>
   );
 }
@@ -546,54 +569,57 @@ function EmployeeCalendarAdmin({ email, name }) {
     }
 
     summary.detailedDays.forEach(({ day, status }) => {
-  const dateStr = getISTDateString(currentYear, targetMonth, day);
+      const dateStr = getISTDateString(currentYear, targetMonth, day);
 
-  const loginRecord = Object.entries(attendanceObj[dateStr] || {})
-    .map(([k, v]) => v)
-    .find(
-      (rec) =>
-        (rec.email || "").toLowerCase() === (email || "").toLowerCase()
-    );
+      const loginRecord = Object.entries(attendanceObj[dateStr] || {})
+        .map(([k, v]) => v)
+        .find(
+          (rec) =>
+            (rec.email || "").toLowerCase() === (email || "").toLowerCase()
+        );
 
-  let finalStatus = status;
-  let holidayReason = null;
-  if (holidaysObj[dateStr]) {
-    finalStatus = "CH";
-    holidayReason = holidaysObj[dateStr].reason;
-  } 
-  else if (new Date(dateStr).getDay() === 2) {
-    // 0 = Sunday, 1 = Monday, 2 = Tuesday ...
-    finalStatus = "Week Off";
-  } else {
-    if (loginRecord?.login) {
-      const loginDate = new Date(loginRecord.login);
-      const hours = loginDate.getHours();
-      const minutes = loginDate.getMinutes();
-      const totalMinutes = hours * 60 + minutes;
+      let finalStatus = status;
+      let holidayReason = null;
 
-      if (totalMinutes >= 570 && totalMinutes <= 660) {
-        finalStatus = "Present"; // 9:30–11:00
-      } else if (totalMinutes > 660) {
-        finalStatus = "Half Day"; // after 11:00
+      if (holidaysObj[dateStr]) {
+        // ✅ Company holiday overrides everything
+        finalStatus = "CH";
+        holidayReason = holidaysObj[dateStr].reason;
+      } else if (loginRecord?.status) {
+        // ✅ Respect stored status in DB
+        finalStatus = loginRecord.status;
+      } else if (new Date(dateStr).getDay() === 2) {
+        // ✅ Default Tuesday as Week Off (if no record and not holiday)
+        finalStatus = "Week Off";
+      } else if (loginRecord?.login) {
+        // ✅ If login time exists → calculate Present / Half Day
+        const loginDate = new Date(loginRecord.login);
+        const hours = loginDate.getHours();
+        const minutes = loginDate.getMinutes();
+        const totalMinutes = hours * 60 + minutes;
+
+        if (totalMinutes >= 570 && totalMinutes <= 660) {
+          finalStatus = "Present"; // 9:30–11:00
+        } else if (totalMinutes > 660) {
+          finalStatus = "Half Day"; // after 11:00
+        } else {
+          finalStatus = "Leave"; // before 9:30 treated as leave
+        }
       } else {
-        finalStatus = "Leave"; // before 9:30 treated as leave
+        // ✅ If no record → mark as Absent
+        finalStatus = "Absent";
       }
-    } else {
-      finalStatus = "Absent";
-    }
-  }
 
-  calendarData.push({
-    key: `day-${day}`,
-    day,
-    status: finalStatus,
-    holidayReason,
-    date: dateStr,
-    loginRecord,
-    isToday: isCurrentMonth && day === today,
-  });
-});
-
+      calendarData.push({
+        key: `day-${day}`,
+        day,
+        status: finalStatus,
+        holidayReason,
+        date: dateStr,
+        loginRecord,
+        isToday: isCurrentMonth && day === today,
+      });
+    });
 
     setAttendanceData(calendarData);
     setLoading(false);
@@ -624,7 +650,7 @@ function EmployeeCalendarAdmin({ email, name }) {
     if (!date) return;
     setSelectedDate(date);
     setSelectedStatus(status);
-    setEmployeeData(record || { email, name, number: "" });
+    setEmployeeData(record || { email, name, number:"" });
     setHolidayReason(holidayReason);
     setModalOpen(true);
   };
@@ -637,134 +663,135 @@ function EmployeeCalendarAdmin({ email, name }) {
     );
 
   return (
-  <div className="max-w-3xl mx-auto p-3 sm:p-4 text-sm">
-    {/* Header */}
-    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2 sm:gap-0">
-      <h1 className="text-lg sm:text-xl font-semibold">
-        {name || email} –{" "}
-        {new Date(
-          new Date().getFullYear(),
-          selectedMonth ?? new Date().getMonth()
-        ).toLocaleString("default", { month: "long", year: "numeric" })}
-      </h1>
+    <div className="max-w-3xl mx-auto p-3 sm:p-4 text-sm">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-2 sm:gap-0">
+        <h1 className="text-lg sm:text-xl font-semibold">
+          {name || email} –{" "}
+          {new Date(
+            new Date().getFullYear(),
+            selectedMonth ?? new Date().getMonth()
+          ).toLocaleString("default", { month: "long", year: "numeric" })}
+        </h1>
 
-      <select
-        onChange={handleMonthChange}
-        value={selectedMonth ?? ""}
-        className="border border-gray-300 px-2 py-1 rounded text-sm bg-white shadow-sm"
-      >
-        <option value="">Current Month</option>
-        {monthOptions.map(({ value, label }) => (
-          <option key={value} value={value}>
-            {label}
-          </option>
-        ))}
-      </select>
-    </div>
-
-    {/* Calendar */}
-    <div className="grid grid-cols-7 gap-1 mb-6">
-      {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
-        <div
-          key={`header-${day}`}
-          className="text-center font-medium py-1 text-xs"
+        <select
+          onChange={handleMonthChange}
+          value={selectedMonth ?? ""}
+          className="border border-gray-300 px-2 py-1 rounded text-sm bg-white shadow-sm"
         >
-          {day}
-        </div>
-      ))}
+          <option value="">Current Month</option>
+          {monthOptions.map(({ value, label }) => (
+            <option key={value} value={value}>
+              {label}
+            </option>
+          ))}
+        </select>
+      </div>
 
-      {attendanceData.map(
-        ({ key, day, status, date, loginRecord, holidayReason, isToday }) => (
+      {/* Calendar */}
+      <div className="grid grid-cols-7 gap-1 mb-6">
+        {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
           <div
-            key={key}
-            onClick={() => handleDayClick(date, status, loginRecord)}
-            className={`cursor-pointer relative p-2 rounded text-center group text-xs sm:text-sm
-              ${day ? statusColor[status] : "bg-transparent"} 
-              ${isToday ? "ring-2 ring-blue-500" : ""} 
-              ${day ? "text-white font-medium" : "text-transparent"}
-              h-10 sm:h-12 flex items-center justify-center`}
+            key={`header-${day}`}
+            className="text-center font-medium py-1 text-xs"
           >
             {day}
-            {day && (
-              <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs p-2 rounded bottom-full mb-1 left-1/2 transform -translate-x-1/2 z-10 w-[160px]">
-                <div className="font-bold border-b border-gray-600 pb-1">
-                  {date}
-                </div>
-                <div className="flex justify-between mt-1">
-                  <span>Status:</span>
-                  <span className="font-semibold">{status}</span>
-                </div>
-                {/* Show holiday reason only if status is CH */}
-                {status === "CH" && holidayReason && (
-                  <div className="flex justify-between mt-1">
-                    <span>Holiday:</span>
-                    <span className="font-semibold">{holidayReason}</span>
-                  </div>
-                )}
-                {loginRecord?.login && (
-                  <div className="flex justify-between mt-1">
-                    <span>Time:</span>
-                    <span>
-                      {new Date(loginRecord.login).toLocaleTimeString(
-                        "en-IN",
-                        {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                          hour12: true,
-                          timeZone: "Asia/Kolkata",
-                        }
-                      )}
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
           </div>
-        )
-      )}
-    </div>
+        ))}
 
-    {/* ✅ Legend (below calendar) */}
-    <div className="mt-6 border-t pt-3 text-xs sm:text-sm">
-      <h3 className="font-semibold mb-2">Legend:</h3>
-      <div className="flex flex-wrap gap-3">
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-green-500" />
-          <span>Present</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-yellow-500" />
-          <span>Half Day</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-red-600" />
-          <span>Absent</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-orange-500" />
-          <span>Leave</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-gray-400" />
-          <span>Week Off</span>
-        </div>
-        <div className="flex items-center gap-1">
-          <div className="w-3 h-3 rounded bg-blue-500" />
-          <span>Company Holiday (CH)</span>
+        {attendanceData.map(
+          ({ key, day, status, date, loginRecord, holidayReason, isToday }) => (
+            <div
+              key={key}
+              onClick={() =>
+                handleDayClick(date, status, loginRecord, holidayReason)
+              }
+              className={`cursor-pointer relative p-2 rounded text-center group text-xs sm:text-sm
+                ${day ? statusColor[status] : "bg-transparent"} 
+                ${isToday ? "ring-2 ring-blue-500" : ""} 
+                ${day ? "text-white font-medium" : "text-transparent"}
+                h-10 sm:h-12 flex items-center justify-center`}
+            >
+              {day}
+              {day && (
+                <div className="absolute hidden group-hover:block bg-gray-800 text-white text-xs p-2 rounded bottom-full mb-1 left-1/2 transform -translate-x-1/2 z-10 w-[160px]">
+                  <div className="font-bold border-b border-gray-600 pb-1">
+                    {date}
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span>Status:</span>
+                    <span className="font-semibold">{status}</span>
+                  </div>
+                  {/* Show holiday reason only if status is CH */}
+                  {status === "CH" && holidayReason && (
+                    <div className="flex justify-between mt-1">
+                      <span>Holiday:</span>
+                      <span className="font-semibold">{holidayReason}</span>
+                    </div>
+                  )}
+                  {loginRecord?.login && (
+                    <div className="flex justify-between mt-1">
+                      <span>Time:</span>
+                      <span>
+                        {new Date(loginRecord.login).toLocaleTimeString(
+                          "en-IN",
+                          {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                            hour12: true,
+                            timeZone: "Asia/Kolkata",
+                          }
+                        )}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        )}
+      </div>
+
+      {/* ✅ Legend (below calendar) */}
+      <div className="mt-6 border-t pt-3 text-xs sm:text-sm">
+        <h3 className="font-semibold mb-2">Legend:</h3>
+        <div className="flex flex-wrap gap-3">
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-green-500" />
+            <span>Present</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-yellow-500" />
+            <span>Half Day</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-red-600" />
+            <span>Absent</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-orange-500" />
+            <span>Leave</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-gray-400" />
+            <span>Week Off</span>
+          </div>
+          <div className="flex items-center gap-1">
+            <div className="w-3 h-3 rounded bg-blue-500" />
+            <span>Company Holiday (CH)</span>
+          </div>
         </div>
       </div>
+
+      {/* Modal */}
+      <AttendanceModal
+        isOpen={modalOpen}
+        onClose={() => setModalOpen(false)}
+        employeeData={employeeData}
+        selectedDate={selectedDate}
+        currentStatus={selectedStatus}
+        onSave={() => fetchAttendance(selectedMonth)}
+      />
     </div>
-
-    {/* Modal */}
-    <AttendanceModal
-      isOpen={modalOpen}
-      onClose={() => setModalOpen(false)}
-      employeeData={employeeData}
-      selectedDate={selectedDate}
-      currentStatus={selectedStatus}
-      onSave={() => fetchAttendance(selectedMonth)}
-    />
-  </div>
-);
-
+  );
 }

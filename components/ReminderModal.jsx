@@ -3,45 +3,59 @@ import { useState, useEffect } from "react";
 import { ref, get } from "firebase/database";
 import { db } from "../lib/firebase";
 
-export default function ReminderModal({ employee }) {
+export default function ReminderModal() {
   const [show, setShow] = useState(false);
   const [needsDocs, setNeedsDocs] = useState(false);
   const [needsBirthday, setNeedsBirthday] = useState(false);
 
   useEffect(() => {
-    if (!employee?.id) return;
+    // Get logged-in email from localStorage
+    const email = typeof window !== "undefined" ? localStorage.getItem("email") : null;
+    if (!email) return;
 
     let cancelled = false;
 
     (async () => {
-      // ✅ Required document keys (kept in one place)
-      const requiredDocs = ["aadhar", "pan", "bank", "photo"];
+      try {
+        // 1️⃣ Fetch all employees
+        const employeesSnap = await get(ref(db, "employees"));
+        const employeesData = employeesSnap.val();
+        if (!employeesData) return;
 
-      // ✅ Documents live at: documents/{employeeId}/files
-      const docsSnap = await get(ref(db, `documents/${employee.id}`));
-      const docsNode = docsSnap.val();
-      const files = docsNode?.files || {};
+        // 2️⃣ Find the employee by email
+        const empEntry = Object.entries(employeesData).find(
+          ([id, emp]) => emp.email === email
+        );
+        if (!empEntry) return;
 
-      // A doc is considered present only if it exists and has a storage path
-      const docsMissing = requiredDocs.some(
-        (key) => !files[key] || typeof files[key] !== "object" || !files[key].name
-      );
+        const [employeeId] = empEntry;
 
-      // ✅ Birthday lives at: birthdays/{employeeId}
-      const bdaySnap = await get(ref(db, `birthdays/${employee.id}`));
-      const birthdayMissing = !bdaySnap.exists() || !bdaySnap.val()?.birthday;
+        // 3️⃣ Check required documents
+        const requiredDocs = ["aadhar", "pan", "bank", "photo"];
+        const docsSnap = await get(ref(db, `documents/${employeeId}`));
+        const files = docsSnap.val()?.files || {};
+        const docsMissing = requiredDocs.some(
+          (key) => !files[key] || typeof files[key] !== "object" || !files[key].name
+        );
 
-      if (cancelled) return;
+        // 4️⃣ Check birthday
+        const bdaySnap = await get(ref(db, `birthdays/${employeeId}`));
+        const birthdayMissing = !bdaySnap.exists() || !bdaySnap.val()?.birthday;
 
-      setNeedsDocs(docsMissing);
-      setNeedsBirthday(birthdayMissing);
-      setShow(docsMissing || birthdayMissing);
+        if (cancelled) return;
+
+        setNeedsDocs(docsMissing);
+        setNeedsBirthday(birthdayMissing);
+        setShow(docsMissing || birthdayMissing);
+      } catch (err) {
+        console.error("Error fetching reminder data:", err);
+      }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [employee?.id]);
+  }, []);
 
   if (!show) return null;
 
