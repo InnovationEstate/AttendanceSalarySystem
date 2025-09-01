@@ -10,12 +10,13 @@ function toDateKey(d) {
   return local.toISOString().split("T")[0]; // YYYY-MM-DD
 }
 
-// Find Monday of given week (to enforce 1 weekoff per week)
+// Get Sunday of the week (start of the week)
 function getWeekStartDate(date) {
   const d = new Date(date);
-  const day = d.getDay(); // 0=Sun ... 6=Sat
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust to Monday
-  return new Date(d.setDate(diff));
+  const day = d.getDay(); // 0 = Sun ... 6 = Sat
+  const sunday = new Date(d);
+  sunday.setDate(d.getDate() - day); // go back to Sunday
+  return sunday;
 }
 
 export default function WeekOffPage() {
@@ -68,7 +69,7 @@ export default function WeekOffPage() {
     });
 
     if (weekoffs[dateKey]) {
-      // Deselect weekoff
+      // Remove weekoff
       await remove(ref(db, `weekoffs/${selectedEmp}/${dateKey}`));
       const updated = { ...weekoffs };
       delete updated[dateKey];
@@ -83,43 +84,55 @@ export default function WeekOffPage() {
     }
   };
 
-  // Generate calendar days
+  // Generate calendar rows
   const renderCalendar = () => {
     const year = currentMonth.getFullYear();
     const month = currentMonth.getMonth();
-
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstDate = new Date(year, month, 1);
+    const lastDate = new Date(year, month + 1, 0);
+    const firstDay = firstDate.getDay(); // 0 = Sun ... 6 = Sat
+    const daysInMonth = lastDate.getDate();
 
     const weeks = [];
-    let dayCounter = 1 - firstDay;
+    let week = [];
+    let dayCounter = 1;
 
-    for (let week = 0; week < 6; week++) {
-      const days = [];
-      for (let i = 0; i < 7; i++) {
-        const date = new Date(year, month, dayCounter);
-        const dateKey = toDateKey(date);
-        const isCurrentMonth = date.getMonth() === month;
+    // Fill first week with empty cells if month doesn't start on Sunday
+    for (let i = 0; i < firstDay; i++) {
+      week.push(<td key={`empty-start-${i}`} />);
+    }
 
-        days.push(
-          <td
-            key={i}
-            onClick={() => isCurrentMonth && handleDateClick(date)}
-            className={`p-2 text-center cursor-pointer rounded-lg ${
-              isCurrentMonth
-                ? weekoffs[dateKey]
-                  ? "bg-red-500 text-white"
-                  : "hover:bg-gray-200"
-                : "text-gray-400"
-            }`}
-          >
-            {isCurrentMonth ? date.getDate() : ""}
-          </td>
-        );
+    while (dayCounter <= daysInMonth) {
+      const date = new Date(year, month, dayCounter);
+      const dateKey = toDateKey(date);
+      const isWeekOff = weekoffs[dateKey];
 
-        dayCounter++;
+      week.push(
+        <td
+          key={dateKey}
+          className={`p-2 text-center cursor-pointer rounded-lg ${
+            isWeekOff ? "bg-red-500 text-white" : "hover:bg-gray-200"
+          }`}
+          onClick={() => handleDateClick(date)}
+        >
+          {dayCounter}
+        </td>
+      );
+
+      if (week.length === 7) {
+        weeks.push(<tr key={`week-${dayCounter}`}>{week}</tr>);
+        week = [];
       }
-      weeks.push(<tr key={week}>{days}</tr>);
+
+      dayCounter++;
+    }
+
+    // Fill last week with empty cells if needed
+    if (week.length > 0) {
+      while (week.length < 7) {
+        week.push(<td key={`empty-end-${week.length}`} />);
+      }
+      weeks.push(<tr key="last-week">{week}</tr>);
     }
 
     return weeks;
@@ -138,7 +151,7 @@ export default function WeekOffPage() {
         <option value="">Select Employee</option>
         {employees.map((emp) => (
           <option key={emp.id} value={emp.id}>
-            {emp.id} - {emp.email}
+            {emp.id} - {emp.email} - {emp.name}
           </option>
         ))}
       </select>
@@ -156,9 +169,7 @@ export default function WeekOffPage() {
           Prev
         </button>
         <h2 className="font-semibold">
-          {currentMonth.toLocaleString("default", {
-            month: "long",
-          })}{" "}
+          {currentMonth.toLocaleString("default", { month: "long" })}{" "}
           {currentMonth.getFullYear()}
         </h2>
         <button
@@ -177,7 +188,7 @@ export default function WeekOffPage() {
       <table className="w-full border-collapse">
         <thead>
           <tr>
-            {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((d) => (
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
               <th key={d} className="border p-2">
                 {d}
               </th>
