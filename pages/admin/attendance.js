@@ -3,7 +3,15 @@
 import { useEffect, useState } from "react";
 import * as XLSX from "xlsx";
 import { db } from "../../lib/firebase";
-import { ref, onValue, get, child, update ,remove,set} from "firebase/database";
+import {
+  ref,
+  onValue,
+  get,
+  child,
+  update,
+  remove,
+  set,
+} from "firebase/database";
 import getAttendanceSummary, {
   getISTDateString,
 } from "../../utils/attendanceUtils";
@@ -18,6 +26,8 @@ export default function AdminAttendance() {
   const [weekoffs, setWeekoffs] = useState({});
   const [showModal, setShowModal] = useState(false);
   const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(null);
 
   // ---- FETCH EMPLOYEES, HOLIDAYS, WEEKOFFS ----
   useEffect(() => {
@@ -209,8 +219,128 @@ export default function AdminAttendance() {
     exportExcel(data, `Attendance_${selectedDate}`);
   }
 
-  function downloadMonthlyAttendance() {
-    alert("Monthly export not supported in this real-time view.");
+  async function downloadMonthlyAttendance(employeesObj, monthIndex = null) {
+    if (!employeesObj) {
+      alert("No employees data available!");
+      return;
+    }
+
+    const employees = Array.isArray(employeesObj)
+      ? employeesObj
+      : Object.values(employeesObj);
+
+    if (employees.length === 0) {
+      alert("No employees data available!");
+      return;
+    }
+
+    // Get current IST date
+    const nowIST = new Date(
+      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+    );
+    const currentMonth = nowIST.getMonth();
+    const currentYear = nowIST.getFullYear();
+    const targetMonth = monthIndex ?? currentMonth;
+
+    const daysInMonth = new Date(currentYear, targetMonth + 1, 0).getDate();
+
+    // Fetch all attendance & holidays
+    const dbRef = ref(db);
+    const [attendanceSnap, holidaySnap] = await Promise.all([
+      get(child(dbRef, `attendance`)),
+      get(child(dbRef, `companyHolidays`)),
+    ]);
+
+    const attendanceObj = attendanceSnap.exists() ? attendanceSnap.val() : {};
+    const holidaysObj = holidaySnap.exists() ? holidaySnap.val() : {};
+
+    const reportData = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const dateStr = `${currentYear}-${String(targetMonth + 1).padStart(
+        2,
+        "0"
+      )}-${String(day).padStart(2, "0")}`;
+
+      employees.forEach((emp) => {
+        const email = (emp.email || "").toLowerCase();
+
+        // Find login record for this employee on this day
+        let loginRecord = null;
+
+        for (const dateKey in attendanceObj) {
+          const records = Object.values(attendanceObj[dateKey]);
+          const rec = records.find(
+            (r) => (r.email || "").toLowerCase() === email
+          );
+
+          if (rec?.login) {
+            // Convert login to IST
+            const loginDateIST = new Date(
+              new Date(rec.login).toLocaleString("en-US", {
+                timeZone: "Asia/Kolkata",
+              })
+            );
+
+            const recordYear = loginDateIST.getFullYear();
+            const recordMonth = loginDateIST.getMonth();
+            const recordDate = loginDateIST.getDate();
+
+            if (
+              recordYear === currentYear &&
+              recordMonth === targetMonth &&
+              recordDate === day
+            ) {
+              loginRecord = { ...rec, loginDateIST }; // keep IST version
+              break;
+            }
+          }
+        }
+
+        let status = "Absent";
+        let loginTime = "";
+        let holidayReason = "";
+
+        if (holidaysObj[dateStr]) {
+          status = "CH";
+          holidayReason = holidaysObj[dateStr].reason;
+        } else if (loginRecord?.status) {
+          status = loginRecord.status;
+        } else if (loginRecord?.loginDateIST) {
+          const totalMinutes =
+            loginRecord.loginDateIST.getHours() * 60 +
+            loginRecord.loginDateIST.getMinutes();
+
+          if (totalMinutes >= 570 && totalMinutes <= 660)
+            status = "Present"; // 9:30–11:00
+          else if (totalMinutes > 660) status = "Half Day"; // after 11:00
+          else status = "Leave"; // before 9:30
+
+          loginTime = loginRecord.loginDateIST.toLocaleTimeString("en-IN", {
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: true,
+          });
+        }
+
+        reportData.push({
+          Date: dateStr,
+          Name: emp.name,
+          Email: emp.email,
+          ID: emp.id,
+          Designation: emp.designation || "N/A",
+          Status: status,
+          LoginTime: loginTime || "N/A",
+          HolidayReason: holidayReason || "",
+        });
+      });
+    }
+
+    // Export to Excel
+    const worksheet = XLSX.utils.json_to_sheet(reportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Monthly Attendance");
+    XLSX.writeFile(workbook, `Attendance_Month_${targetMonth + 1}.xlsx`);
   }
 
   // ---- RENDER ----
@@ -234,24 +364,60 @@ export default function AdminAttendance() {
         </div>
 
         {/* Download Dropdown */}
-        <div className="relative w-full md:w-auto group">
+        <div
+          className="relative w-full md:w-auto"
+          onMouseEnter={() => {
+            clearTimeout(window.hideDropdownTimeout);
+            setShowDropdown(true);
+          }}
+          onMouseLeave={() => {
+            window.hideDropdownTimeout = setTimeout(() => {
+              setShowDropdown(false);
+            }, 2000); // stays 2 seconds after mouse leaves
+          }}
+        >
           <button className="w-full md:w-auto bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 text-sm font-medium">
             Download Summary
           </button>
-          <div className="absolute right-0 mt-1 hidden group-hover:block bg-white border rounded shadow z-10 w-full md:w-48">
-            <button
-              onClick={downloadDayAttendance}
-              className="block w-full px-4 py-2 hover:bg-gray-100 text-left text-sm"
-            >
-              By Date
-            </button>
-            <button
-              onClick={downloadMonthlyAttendance}
-              className="block w-full px-4 py-2 hover:bg-gray-100 text-left text-sm"
-            >
-              By Month
-            </button>
-          </div>
+
+          {showDropdown && (
+            <div className="absolute right-0 mt-1 bg-white border rounded shadow z-10 w-full md:w-52 p-2">
+              {/* By Date */}
+              <button
+                onClick={downloadDayAttendance}
+                className="block w-full px-4 py-2 hover:bg-gray-100 text-left text-sm rounded"
+              >
+                By Date
+              </button>
+
+              {/* By Month */}
+              <div className="mt-1 flex flex-col gap-1">
+                <button
+                  onClick={() =>
+                    downloadMonthlyAttendance(employees, selectedMonth)
+                  }
+                  className="block w-full px-4 py-2 hover:bg-gray-100 text-left text-sm rounded"
+                >
+                  By Month
+                </button>
+
+                {/* Month Selector */}
+                <select
+                  className="border rounded px-2 py-1 text-sm mt-1"
+                  value={selectedMonth ?? new Date().getMonth()}
+                  onChange={(e) => setSelectedMonth(parseInt(e.target.value))}
+                >
+                  {Array.from({ length: 12 }, (_, i) => (
+                    <option key={i} value={i}>
+                      {new Date(0, i).toLocaleString("en-US", {
+                        month: "long",
+                      })}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -397,34 +563,33 @@ function AttendanceModal({
       }
 
       // ✅ CASE 2: Present / Half Day
-if (["Present", "Half Day"].includes(status)) {
-  let loginDate = null;
-  if (loginTime) {
-    loginDate = new Date(`${selectedDate}T${loginTime}:00+05:30`); // IST
-  }
+      if (["Present", "Half Day"].includes(status)) {
+        let loginDate = null;
+        if (loginTime) {
+          loginDate = new Date(`${selectedDate}T${loginTime}:00+05:30`); // IST
+        }
 
-  const record = {
-    name: employeeData.name,
-    email: employeeData.email,
-    number: employeeData.number || "",
-    date: dateKey,
-    device: employeeData.device || "",
-    location: employeeData.location || "",
-    login: loginDate ? loginDate.toISOString() : null, // UTC ISO
-    istLoginTime: loginDate
-      ? new Date(
-          loginDate.getTime() - loginDate.getTimezoneOffset() * 60000
-        ).toISOString() // ✅ ISO in IST
-      : null,
-    status,
-  };
+        const record = {
+          name: employeeData.name,
+          email: employeeData.email,
+          number: employeeData.number || "",
+          date: dateKey,
+          device: employeeData.device || "",
+          location: employeeData.location || "",
+          login: loginDate ? loginDate.toISOString() : null, // UTC ISO
+          istLoginTime: loginDate
+            ? new Date(
+                loginDate.getTime() - loginDate.getTimezoneOffset() * 60000
+              ).toISOString() // ✅ ISO in IST
+            : null,
+          status,
+        };
 
-  await set(empRef, record);
-  toast.success("Attendance updated ✅");
-  onClose();
-  return;
-}
-
+        await set(empRef, record);
+        toast.success("Attendance updated ✅");
+        onClose();
+        return;
+      }
 
       // ✅ CASE 3: Leave / Week Off (store without login)
       if (["Leave", "Week Off"].includes(status)) {
@@ -505,7 +670,6 @@ if (["Present", "Half Day"].includes(status)) {
   );
 }
 
-
 function EmployeeCalendarAdmin({ email, name }) {
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -515,6 +679,7 @@ function EmployeeCalendarAdmin({ email, name }) {
   const [selectedStatus, setSelectedStatus] = useState(null);
   const [employeeData, setEmployeeData] = useState(null);
   const [holidayReason, setHolidayReason] = useState("");
+  const [weekoffs, setWeekoffs] = useState({}); // ✅ Dynamic weekoffs
 
   const statusColor = {
     Present: "bg-green-500",
@@ -525,6 +690,16 @@ function EmployeeCalendarAdmin({ email, name }) {
     CH: "bg-blue-500",
     Empty: "bg-transparent",
   };
+
+  // ✅ Fetch weekoffs from Firebase
+  useEffect(() => {
+    const weekRef = ref(db, "weekoffs");
+    const unsubWeek = onValue(weekRef, (snapshot) => {
+      const data = snapshot.val();
+      setWeekoffs(data || {}); // e.g., { "2025-09-02": true, ... }
+    });
+    return () => unsubWeek();
+  }, []);
 
   const fetchAttendance = async (monthIndex = null) => {
     if (!email) return;
@@ -588,9 +763,6 @@ function EmployeeCalendarAdmin({ email, name }) {
       } else if (loginRecord?.status) {
         // ✅ Respect stored status in DB
         finalStatus = loginRecord.status;
-      } else if (new Date(dateStr).getDay() === 2) {
-        // ✅ Default Tuesday as Week Off (if no record and not holiday)
-        finalStatus = "Week Off";
       } else if (loginRecord?.login) {
         // ✅ If login time exists → calculate Present / Half Day
         const loginDate = new Date(loginRecord.login);
@@ -605,6 +777,9 @@ function EmployeeCalendarAdmin({ email, name }) {
         } else {
           finalStatus = "Leave"; // before 9:30 treated as leave
         }
+      } else if (weekoffs[dateStr] || new Date(dateStr).getDay() === 2) {
+        // ✅ Weekoff from DB or default Tuesday
+        finalStatus = "Week Off";
       } else {
         // ✅ If no record → mark as Absent
         finalStatus = "Absent";
@@ -627,7 +802,7 @@ function EmployeeCalendarAdmin({ email, name }) {
 
   useEffect(() => {
     fetchAttendance();
-  }, [email]);
+  }, [email, weekoffs]);
 
   const monthOptions = Array.from(
     { length: new Date().getMonth() + 1 },
@@ -650,7 +825,7 @@ function EmployeeCalendarAdmin({ email, name }) {
     if (!date) return;
     setSelectedDate(date);
     setSelectedStatus(status);
-    setEmployeeData(record || { email, name, number:"" });
+    setEmployeeData(record || { email, name, number: "" });
     setHolidayReason(holidayReason);
     setModalOpen(true);
   };
@@ -722,7 +897,6 @@ function EmployeeCalendarAdmin({ email, name }) {
                     <span>Status:</span>
                     <span className="font-semibold">{status}</span>
                   </div>
-                  {/* Show holiday reason only if status is CH */}
                   {status === "CH" && holidayReason && (
                     <div className="flex justify-between mt-1">
                       <span>Holiday:</span>
@@ -752,7 +926,7 @@ function EmployeeCalendarAdmin({ email, name }) {
         )}
       </div>
 
-      {/* ✅ Legend (below calendar) */}
+      {/* Legend */}
       <div className="mt-6 border-t pt-3 text-xs sm:text-sm">
         <h3 className="font-semibold mb-2">Legend:</h3>
         <div className="flex flex-wrap gap-3">
