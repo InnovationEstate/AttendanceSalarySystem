@@ -25,6 +25,7 @@
     "react": "^19.0.0",
     "react-calendar": "^6.0.0",
     "react-dom": "^19.0.0",
+    "react-select": "^5.10.2",
     "react-toastify": "^11.0.5",
     "ua-parser-js": "^2.0.4",
     "xlsx": "^0.18.5"
