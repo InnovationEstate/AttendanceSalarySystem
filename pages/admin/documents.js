@@ -11,6 +11,15 @@ export default function AdminDocuments() {
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [loadingDocs, setLoadingDocs] = useState(false);
 
+  const docLabels = {
+  aadhar: "Aadhar Card",
+  pan: "PAN Card",
+  bank: "Bank Details",
+  photo: "Photograph",
+  experience: "Experience Letter",
+};
+
+
   useEffect(() => {
     async function fetchEmployees() {
       setMessage("Loading employees...");
@@ -179,7 +188,7 @@ export default function AdminDocuments() {
                 key={docKey}
                 className="flex items-center justify-between border rounded p-2"
               >
-                <span className="capitalize font-medium">{docKey}</span>
+                <span className="capitalize font-medium">{docLabels[docKey] || docKey}</span>
                 <div className="flex space-x-4">
                   <button
                     onClick={() => viewDocument(docKey)}

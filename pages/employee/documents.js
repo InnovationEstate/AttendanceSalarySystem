@@ -11,6 +11,13 @@ import { get, ref as dbRef, set } from "firebase/database";
 
 const requiredDocs = ["aadhar", "pan", "bank", "photo"];
 const optionalDocs = ["experience"];
+const docLabels = {
+  aadhar: "Aadhar Card",
+  pan: "PAN Card",
+  bank: "Bank Details",
+  photo: "Photograph",
+  experience: "Experience Letter",
+};
 
 export default function EmployeeDocuments() {
   const [employee, setEmployee] = useState(null); // employee object from localStorage
@@ -154,75 +161,84 @@ export default function EmployeeDocuments() {
     );
   };
 
-  return (
-    <div className="bg-gray-50 flex justify-center items-center p-4 min-h-screen">
-      <div className="max-w-lg bg-white rounded shadow p-6 w-full">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className="text-2xl font-semibold">Employee Documents</h2>
-          {employeeId && (
-            <span className="text-sm text-gray-600">ID: {employeeId}</span>
-          )}
-        </div>
-
-        {/* Documents Grid */}
-        <div className="grid gap-5">
-          {allDocKeys.map((doc) => (
-            <div
-              key={doc}
-              className="bg-gray-50 border rounded-lg p-4 shadow-sm flex flex-col gap-2"
-            >
-              <div className="flex items-center justify-between">
-                <div className="font-medium capitalize">
-                  {doc}{" "}
-                  {requiredDocs.includes(doc) && (
-                    <span className="text-red-500">*</span>
-                  )}
-                </div>
-
-                {existingDocs[doc] ? (
-                  <button
-                    onClick={() => viewDocument(doc)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded"
-                    disabled={loading}
-                  >
-                    View
-                  </button>
-                ) : (
-                  <span className="text-xs text-gray-500">Not uploaded</span>
-                )}
-              </div>
-
-              {existingDocs[doc] && (
-                <div className="text-gray-500 text-sm italic">
-                  Uploaded: {existingDocs[doc]?.originalName || "Unknown file"}
-                </div>
-              )}
-
-              <input
-                type="file"
-                name={doc}
-                onChange={handleChange}
-                className="text-sm"
-                disabled={loading || !employeeId}
-              />
-            </div>
-          ))}
-        </div>
-
-        <button
-          onClick={uploadDocuments}
-          className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition"
-          disabled={loading || !employeeId}
-        >
-          {loading ? "Uploading..." : "Upload Selected Files"}
-        </button>
-
-        {message && (
-          <p className="mt-4 text-center text-red-600 whitespace-pre-wrap">
-            {message}
-          </p>
+ return (
+  <div className="bg-gray-50 flex justify-center items-center p-4 min-h-screen">
+    <div className="w-full max-w-lg md:max-w-2xl bg-white rounded-lg shadow p-4 sm:p-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 gap-2">
+        <h2 className="text-xl sm:text-2xl font-semibold text-gray-800">
+          Employee Documents
+        </h2>
+        {employeeId && (
+          <span className="text-xs sm:text-sm text-gray-600">
+            ID: {employeeId}
+          </span>
         )}
       </div>
+
+      {/* Documents Grid */}
+      <div className="grid gap-4 sm:gap-5">
+        {allDocKeys.map((doc) => (
+          <div
+            key={doc}
+            className="bg-gray-50 border rounded-lg p-3 sm:p-4 shadow-sm flex flex-col gap-2"
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <div className="font-medium text-gray-700">
+              {docLabels[doc] || doc}{" "}
+              {requiredDocs.includes(doc) && (
+                <span className="text-red-500">*</span>
+              )}
+            </div>
+
+
+              {existingDocs[doc] ? (
+                <button
+                  onClick={() => viewDocument(doc)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm px-2 sm:px-3 py-1 rounded"
+                  disabled={loading}
+                >
+                  View
+                </button>
+              ) : (
+                <span className="text-xs text-gray-500">Not uploaded</span>
+              )}
+            </div>
+
+            {existingDocs[doc] && (
+              <div className="text-gray-800 text-xs sm:text-sm italic truncate">
+                Uploaded: {existingDocs[doc]?.originalName || "Unknown file"}
+              </div>
+            )}
+
+            <input
+              type="file"
+              name={doc}
+              onChange={handleChange}
+              className="text-xs sm:text-sm"
+              disabled={loading || !employeeId}
+            />
+          </div>
+        ))}
+      </div>
+
+      {/* Upload Button */}
+      <button
+        onClick={uploadDocuments}
+        className="w-full mt-6 bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded transition text-sm sm:text-base"
+        disabled={loading || !employeeId}
+      >
+        {loading ? "Uploading..." : "Upload Selected Files"}
+      </button>
+
+      {/* Message */}
+      {message && (
+        <p className="mt-4 text-center text-red-600 whitespace-pre-wrap text-sm sm:text-base">
+          {message}
+        </p>
+      )}
     </div>
-  );
+  </div>
+);
+
 }

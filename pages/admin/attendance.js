@@ -504,6 +504,7 @@ export default function AdminAttendance() {
               ✕
             </button>
             <EmployeeCalendarAdmin
+              id={selectedEmployee.id}
               email={selectedEmployee.email}
               name={selectedEmployee.name}
             />
@@ -670,7 +671,7 @@ function AttendanceModal({
   );
 }
 
-function EmployeeCalendarAdmin({ email, name }) {
+function EmployeeCalendarAdmin({id, email, name }) {
   const [attendanceData, setAttendanceData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedMonth, setSelectedMonth] = useState(null);
@@ -692,14 +693,26 @@ function EmployeeCalendarAdmin({ email, name }) {
   };
 
   // ✅ Fetch weekoffs from Firebase
-  useEffect(() => {
-    const weekRef = ref(db, "weekoffs");
+  // ✅ Fetch weekoffs for this employee only
+useEffect(() => {
+  if (!email) return;
+
+  const empRef = ref(db, "employees");
+  get(empRef).then(snapshot => {
+    if (!snapshot.exists()) return;
+    const allEmployees = Object.values(snapshot.val());
+    const emp = allEmployees.find(e => 
+      (e.email || "").toLowerCase() === email.toLowerCase()
+    );
+    if (!emp) return;
+
+    const weekRef = ref(db, `weekoffs/${emp.id}`);
     const unsubWeek = onValue(weekRef, (snapshot) => {
-      const data = snapshot.val();
-      setWeekoffs(data || {}); // e.g., { "2025-09-02": true, ... }
+      setWeekoffs(snapshot.val() || {});
     });
     return () => unsubWeek();
-  }, []);
+  });
+}, [email]);
 
   const fetchAttendance = async (monthIndex = null) => {
     if (!email) return;
@@ -777,13 +790,16 @@ function EmployeeCalendarAdmin({ email, name }) {
         } else {
           finalStatus = "Leave"; // before 9:30 treated as leave
         }
-      } else if (weekoffs[dateStr] || new Date(dateStr).getDay() === 2) {
-        // ✅ Weekoff from DB or default Tuesday
+      } else if (weekoffs?.[dateStr]) {
+        // ✅ Weekoff from DB for this employee
+        finalStatus = "Week Off";
+      } else if (new Date(dateStr).getDay() === 2) {
+        // ✅ Fallback: Tuesday (only if admin hasn’t set)
         finalStatus = "Week Off";
       } else {
-        // ✅ If no record → mark as Absent
         finalStatus = "Absent";
       }
+
 
       calendarData.push({
         key: `day-${day}`,

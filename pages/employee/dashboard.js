@@ -7,7 +7,6 @@ import { UAParser } from "ua-parser-js";
 import { db } from "../../lib/firebase"; // ✅ import initialized DB
 import { ref, get, query, orderByChild, equalTo } from "firebase/database"; // ✅ Firebase DB
 import ReminderModal from "@/components/ReminderModal";
-
 export default function Dashboard() {
   const router = useRouter();
 

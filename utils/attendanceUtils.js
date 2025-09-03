@@ -55,6 +55,8 @@ export default function getAttendanceSummary(
   let weekOff = 0;
 
   let paidLeavesUsed = 0;
+  let holidays = 0;
+
 
   // Detailed day info for UI calendar
   const detailedDays = [];
@@ -73,17 +75,30 @@ export default function getAttendanceSummary(
       continue;
     }
 
-    // --- Fallback: Tuesday week off ---
-    const dt = new Date(year, month, day);
-    const isTuesday = dt.getDay() === 2; // 0=Sun, 2=Tue
-    if (isTuesday) {
-      weekOff++;
-      detailedDays.push({ day, status: "Week Off" });
-      continue;
-    }
+  // --- Fallback: Tuesday week off ---
+// Apply only if: it's Tuesday + no weekoff in DB + no employee record
+const dt = new Date(year, month, day);
+const isTuesday = dt.getDay() === 2; // 0=Sunday, 2=Tuesday
+
+const hasRecord = attendanceData.some(
+  (r) =>
+    r.email &&
+    r.email.toLowerCase() === employeeEmail.toLowerCase() &&
+    r.date === dateStr
+);
+
+const hasWeekOffInDB = weekOffSet.has(dateStr);
+
+if (isTuesday && !hasRecord && !hasWeekOffInDB) {
+  weekOff++;
+  detailedDays.push({ day, status: "Week Off" });
+  continue;
+}
+
 
     // --- Company Holiday ---
     if (holidaysSet.has(dateStr)) {
+      holidays++;
       detailedDays.push({ day, status: "Holiday" });
       // Holiday is paid, so skip leave/unpaid logic
       continue;
@@ -193,6 +208,7 @@ export default function getAttendanceSummary(
     paidHalfDaysUsed,
     unpaidHalfDays,
     weekOff,
+    holidays,
     totalDays: countTillToday ? today : totalDays,
     detailedDays,
   };
