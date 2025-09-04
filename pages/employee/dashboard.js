@@ -56,7 +56,7 @@ export default function Dashboard() {
   const fetchWeekOffs = async (employeeId) => {
     if (!employeeId) return new Set();
     try {
-      const weekOffRef = ref(db, `weekOff/${employeeId}`);
+      const weekOffRef = ref(db, `weekoffs/${employeeId}`);
       const snapshot = await get(weekOffRef);
       if (snapshot.exists()) {
         const data = snapshot.val(); // { "yyyy-mm-dd": true, ... }
@@ -181,19 +181,44 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
-    const storedEmp = JSON.parse(localStorage.getItem("employee"));
-    if (!storedEmp?.email) return;
-    setEmp(storedEmp);
+  const storedEmp = JSON.parse(localStorage.getItem("employee"));
+  if (!storedEmp?.email) return;
 
-    // Fetch holidays, weekOffs, and approved leaves, then compute summary
-    Promise.all([
-      fetchCompanyHolidays(),
-      fetchWeekOffs(storedEmp.id),           // dynamic week offs
-      fetchApprovedLeaves(storedEmp.email),  // approved leaves (full-day)
-    ]).then(([holidaysList, weekOffSetVal, approvedLeavesSetVal]) => {
-      fetchSummary(storedEmp.email, holidaysList, weekOffSetVal, approvedLeavesSetVal);
-    });
-  }, []);
+  // 1. Fetch full employee record (with id) from employees DB
+  const fetchEmployeeData = async () => {
+    try {
+      const empRef = ref(db, "employees");
+      const snapshot = await get(empRef);
+
+      if (snapshot.exists()) {
+        const employees = snapshot.val();
+        const empEntry = Object.values(employees).find(
+          (e) => e.email?.toLowerCase() === storedEmp.email.toLowerCase()
+        );
+
+        if (empEntry) {
+          // Merge DB id with local storage data
+          const employeeWithId = { ...storedEmp, id: empEntry.id };
+          setEmp(employeeWithId);
+
+          // 2. Fetch holidays, weekOffs, and approved leaves, then compute summary
+          Promise.all([
+            fetchCompanyHolidays(),
+            fetchWeekOffs(empEntry.id),              // ✅ use id from DB
+            fetchApprovedLeaves(storedEmp.email),    // still use email for leaves
+          ]).then(([holidaysList, weekOffSetVal, approvedLeavesSetVal]) => {
+            fetchSummary(storedEmp.email, holidaysList, weekOffSetVal, approvedLeavesSetVal);
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching employee record:", err);
+    }
+  };
+
+  fetchEmployeeData();
+}, []);
+
 
   const markAttendance = async (fetchSummaryFn, setMessageFn, setLoadingFn, routerInst) => {
     const empLocal = JSON.parse(localStorage.getItem("employee"));

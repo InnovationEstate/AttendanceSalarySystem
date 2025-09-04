@@ -406,16 +406,17 @@ export default function AdminSalary() {
               <div className="font-semibold text-red-600">
                 {selectedEmployee.unpaidLeaves}
               </div>
+              
+              <div>Holidays:</div>
+              <div className="text-green-600 font-semibold">
+                {selectedEmployee.holidays || 0}
+              </div>
 
               <div>Total Deduction:</div>
               <div className="font-semibold text-red-600">
                 ₹ {selectedEmployee.totalDeduction.toFixed(2)}
               </div>
 
-              <div>Holidays:</div>
-              <div className="text-green-600 font-semibold">
-                {selectedEmployee.holidays || 0}
-              </div>
 
               <div className="text-base font-semibold">Net Salary:</div>
               <div className="text-green-700 text-base font-bold">

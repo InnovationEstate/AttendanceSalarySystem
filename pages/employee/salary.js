@@ -76,7 +76,7 @@ export default function EmployeeSalary() {
         // 4. Fetch weekOffs
         const empId = fullEmployee?.id || empLocal.id || null;
         if (empId) {
-          const weekOffSnap = await get(ref(db, `weekOff/${empId}`));
+          const weekOffSnap = await get(ref(db, `weekoffs/${empId}`));
           if (weekOffSnap.exists()) {
             const wData = weekOffSnap.val() || {};
             const wSet = new Set(Object.keys(wData));
@@ -352,8 +352,8 @@ export default function EmployeeSalary() {
           <div>Half Days:</div>
           <div className="font-semibold text-orange-600">{half}</div>
 
-          {/* <div>Week Offs:</div>
-          <div className="font-semibold text-gray-600">{weekOff}</div> */}
+          <div>Week Offs:</div>
+          <div className="font-semibold text-gray-600">{weekOff}</div>
 
           <div>Paid Leaves Used:</div>
           <div className="font-semibold text-blue-600">{paidLeavesUsed}</div>
@@ -364,13 +364,13 @@ export default function EmployeeSalary() {
           {/* <div>Unpaid Half Days:</div>
           <div className="font-semibold text-red-500">{unpaidHalfDays}</div> */}
 
+          <div>Holidays:</div>
+          <div className="text-green-600 font-semibold">{holidaysCount}</div>
           
 
           <div>Total Deduction:</div>
           <div className="font-semibold text-red-600">₹ {totalDeduction.toFixed(2)}</div>
 
-          <div>Holidays:</div>
-          <div className="text-green-600 font-semibold">{holidaysCount}</div>
 
           <div className="text-base font-semibold">Net Salary:</div>
           <div className="text-green-700 text-base font-bold">₹ {netSalary.toFixed(2)}</div>

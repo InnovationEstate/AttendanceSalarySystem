@@ -281,146 +281,154 @@ export default function EmployeeAttendance() {
     Empty: "bg-transparent",
   };
 
-  const fetchAttendance = async (monthIndex = null) => {
-    const employee = JSON.parse(localStorage.getItem("employee"));
-    if (!employee) return;
+ const fetchAttendance = async (monthIndex = null) => {
+  const empLocal = JSON.parse(localStorage.getItem("employee"));
+  if (!empLocal?.email) return;
 
-    setEmp(employee);
-    setLoading(true);
+  setLoading(true);
 
-    const dbRef = ref(db);
-    const [attendanceSnap, holidaySnap, weekoffSnap, leaveSnap] =
-      await Promise.all([
-        get(child(dbRef, `attendance`)),
-        get(child(dbRef, `companyHolidays`)),
-        get(child(dbRef, `weekoffs`)),
-        get(child(dbRef, `leaveRequests/${employee.id}`)),
-      ]);
+  const dbRef = ref(db);
 
-    const attendanceObj = attendanceSnap.exists() ? attendanceSnap.val() : {};
-    const holidaysObj = holidaySnap.exists() ? holidaySnap.val() : {};
-    const weekoffsObj = weekoffSnap.exists() ? weekoffSnap.val() : {};
-    const leaveObj = leaveSnap.exists() ? leaveSnap.val() : {};
+  // 🔹 Step 1: Get full employee record (with id)
+  const employeesSnap = await get(child(dbRef, "employees"));
+  if (!employeesSnap.exists()) {
+    setLoading(false);
+    return;
+  }
 
-    // Flatten attendance
-    const allEntries = Object.entries(attendanceObj).flatMap(([_, records]) =>
-      Object.values(records)
-    );
+  const employeesArray = Object.values(employeesSnap.val());
+  const fullEmployee = employeesArray.find(
+    (e) => e.email.toLowerCase() === empLocal.email.toLowerCase()
+  );
 
-    // Current IST date
-    const nowIST = new Date(
-      new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
-    );
+  if (!fullEmployee) {
+    setLoading(false);
+    return;
+  }
 
-    const currentMonth = nowIST.getMonth();
-    const currentYear = nowIST.getFullYear();
-    const targetMonth = monthIndex ?? currentMonth;
-    const isCurrentMonth = targetMonth === currentMonth;
-    const today = isCurrentMonth ? nowIST.getDate() : 0;
+  setEmp(fullEmployee);
 
-    // Get summary
-    const summary = getAttendanceSummary(
-      allEntries,
-      targetMonth,
-      currentYear,
-      isCurrentMonth ? today : 31,
-      true,
-      employee.email
-    );
+  // 🔹 Step 2: Fetch attendance, holidays, weekoffs, leaveRequests
+  const [attendanceSnap, holidaySnap, weekoffSnap, leaveSnap] =
+    await Promise.all([
+      get(child(dbRef, `attendance`)),
+      get(child(dbRef, `companyHolidays`)),
+      get(child(dbRef, `weekoffs/${fullEmployee.id}`)), // use employee.id
+      get(child(dbRef, `leaveRequests/${fullEmployee.id}`)), // use employee.id
+    ]);
 
-    const firstDay = new Date(currentYear, targetMonth, 1).getDay();
-    const calendarData = [];
+  const attendanceObj = attendanceSnap.exists() ? attendanceSnap.val() : {};
+  const holidaysObj = holidaySnap.exists() ? holidaySnap.val() : {};
+  const weekoffsObj = weekoffSnap.exists() ? weekoffSnap.val() : {};
+  const leaveObj = leaveSnap.exists() ? leaveSnap.val() : {};
 
-    // Fill empty slots before first day
-    for (let i = 0; i < firstDay; i++) {
-      calendarData.push({ key: `empty-${i}`, day: null, status: "Empty" });
+  // Flatten attendance
+  const allEntries = Object.entries(attendanceObj).flatMap(([_, records]) =>
+    Object.values(records)
+  );
+
+  // Current IST date
+  const nowIST = new Date(
+    new Date().toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+
+  const currentMonth = nowIST.getMonth();
+  const currentYear = nowIST.getFullYear();
+  const targetMonth = monthIndex ?? currentMonth;
+  const isCurrentMonth = targetMonth === currentMonth;
+  const today = isCurrentMonth ? nowIST.getDate() : 0;
+
+  // Get summary
+  const summary = getAttendanceSummary(
+    allEntries,
+    targetMonth,
+    currentYear,
+    isCurrentMonth ? today : 31,
+    true,
+    fullEmployee.email // use email for matching attendance
+  );
+
+  const firstDay = new Date(currentYear, targetMonth, 1).getDay();
+  const calendarData = [];
+
+  // Fill empty slots before first day
+  for (let i = 0; i < firstDay; i++) {
+    calendarData.push({ key: `empty-${i}`, day: null, status: "Empty" });
+  }
+
+  summary.detailedDays.forEach(({ day }) => {
+    const dateStr = getISTDateString(currentYear, targetMonth, day);
+    const dateObj = new Date(currentYear, targetMonth, day);
+    const weekday = dateObj.getDay();
+
+    let finalStatus = "Absent"; // default
+
+    // 1. Company Holiday
+    if (holidaysObj[dateStr]) {
+      finalStatus = "CH";
     }
-
-    summary.detailedDays.forEach(({ day, status }) => {
-      const dateStr = getISTDateString(currentYear, targetMonth, day);
-      const currentDate = new Date(dateStr);
-      const weekday = currentDate.getDay(); // 0=Sun ... 6=Sat
-
-      let finalStatus = status;
-
-      // Normalize leave
-      if (finalStatus && finalStatus.toLowerCase().includes("leave")) {
-        finalStatus = "Leave";
-      }
-
-      // ✅ 1. Company Holiday
-      if (holidaysObj[dateStr]) {
-        finalStatus = "CH";
-      }
-      // ✅ 2. Weekoff from DB (per-employee or admin-set)
-      else if (weekoffsObj[employee.id] && weekoffsObj[employee.id][dateStr]) {
-        finalStatus = "Week Off";
-      }
-      // ✅ 3. Leave Requests (approved only)
-      else if (leaveObj[dateStr] && leaveObj[dateStr].status === "approved") {
-        finalStatus = "Leave";
-      }
-      // ✅ 4. Default weekoff (from admin, fallback Tuesday if not set)
-      else {
-        const defaultWeekday =
-          weekoffsObj.defaultDay !== undefined
-            ? weekoffsObj.defaultDay // stored as number 0–6
-            : 2; // fallback Tuesday
-        if (weekday === defaultWeekday) {
-          const loginRecord = allEntries.find(
-            (a) =>
-              a.date === dateStr &&
-              a.email.toLowerCase() === employee.email.toLowerCase()
-          );
-          if (loginRecord) {
-            const safeStatus = loginRecord.status
-              ? String(loginRecord.status)
-              : "";
-            finalStatus = safeStatus.toLowerCase().includes("leave")
-              ? "Leave"
-              : "Present";
-          } else {
-            finalStatus = "Week Off";
-          }
-        } else {
-          // ✅ 5. Login record
-          const loginRecord = allEntries.find(
-            (a) =>
-              a.date === dateStr &&
-              a.email.toLowerCase() === employee.email.toLowerCase()
-          );
-          if (loginRecord) {
-            const safeStatus = loginRecord.status
-              ? String(loginRecord.status)
-              : "";
-            finalStatus = safeStatus.toLowerCase().includes("leave")
-              ? "Leave"
-              : safeStatus || "Present";
-          }
-        }
-      }
-
-      // Find loginRecord (for tooltip info)
+    // 2. Weekoff (✅ use weekoffsObj directly since we fetched only for this employee.id)
+    else if (weekoffsObj[dateStr]) {
+      finalStatus = "Week Off";
+    }
+    // 3. Approved Leave
+    else if (leaveObj[dateStr] && leaveObj[dateStr].status === "approved") {
+      finalStatus = "Leave";
+    }
+    // 4. Attendance Record (login time based logic)
+    else {
       const loginRecord = allEntries.find(
         (a) =>
           a.date === dateStr &&
-          a.email.toLowerCase() === employee.email.toLowerCase()
+          a.email.toLowerCase() === fullEmployee.email.toLowerCase()
       );
 
-      calendarData.push({
-        key: `day-${day}`,
-        day,
-        status: finalStatus,
-        date: dateStr,
-        loginTime: loginRecord?.login,
-        holidayReason: holidaysObj[dateStr]?.reason,
-        isToday: isCurrentMonth && day === today,
-      });
-    });
+      if (loginRecord) {
+        if (loginRecord.login) {
+          const loginTimeIST = new Date(
+            new Date(loginRecord.login).toLocaleString("en-US", {
+              timeZone: "Asia/Kolkata",
+            })
+          );
+          const loginHour = loginTimeIST.getHours();
+          const loginMinute = loginTimeIST.getMinutes();
 
-    setAttendanceData(calendarData);
-    setLoading(false);
-  };
+          if (loginHour < 11 || (loginHour === 11 && loginMinute === 0)) {
+            finalStatus = "Present";
+          } else {
+            finalStatus = "Half Day";
+          }
+        } else {
+          finalStatus = "Present"; // fallback if login exists but no time
+        }
+      }
+    }
+
+        // 5. Default weekly off (apply only if still absent)
+    if (finalStatus === "Absent" && weekday === 2) {
+      finalStatus = "Week Off";
+    }
+
+    // Push to calendar data
+    calendarData.push({
+      key: `day-${day}`,
+      day,
+      status: finalStatus,
+      date: dateStr,
+      loginTime: allEntries.find(
+        (a) =>
+          a.date === dateStr &&
+          a.email.toLowerCase() === fullEmployee.email.toLowerCase()
+      )?.login,
+      holidayReason: holidaysObj[dateStr]?.reason,
+      isToday: isCurrentMonth && day === today,
+    });
+  });
+
+  setAttendanceData(calendarData);
+  setLoading(false);
+};
+
 
   useEffect(() => {
     fetchAttendance();
