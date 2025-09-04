@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useEffect, useState, useMemo } from "react";
@@ -21,10 +20,9 @@ export default function AdminSalary() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const handleRowClick = (emp) => {
-  setSelectedEmployee(emp);
-  setIsModalOpen(true);
-};
-
+    setSelectedEmployee(emp);
+    setIsModalOpen(true);
+  };
 
   useEffect(() => {
     const db = getDatabase(app);
@@ -61,7 +59,7 @@ export default function AdminSalary() {
           : [];
 
         // Week Offs
-        const weekOffSnap = await get(child(dbRef, "weekOff"));
+        const weekOffSnap = await get(child(dbRef, "weekoffs"));
         const weekOffObj = weekOffSnap.exists() ? weekOffSnap.val() : {};
 
         setEmployees(empList || []);
@@ -78,7 +76,11 @@ export default function AdminSalary() {
   }, []);
 
   // ✅ Calculate days till today (if current month), otherwise full month
-  const totalDaysInMonth = new Date(selectedYear, selectedMonth + 1, 0).getDate();
+  const totalDaysInMonth = new Date(
+    selectedYear,
+    selectedMonth + 1,
+    0
+  ).getDate();
   const daysTillToday =
     selectedMonth === new Date().getMonth() &&
     selectedYear === new Date().getFullYear()
@@ -156,14 +158,13 @@ export default function AdminSalary() {
       summary.present +
       summary.paidLeavesUsed +
       summary.paidHalfDaysUsed * 0.5 +
+      summary.weekOff +
       summary.leave +
       (summary.holidays || 0);
 
     // Unpaid days count
     const unpaidDays =
-      summary.absent +
-      summary.unpaidLeaves +
-      summary.unpaidHalfDays * 0.5;
+      summary.absent + summary.unpaidLeaves + summary.unpaidHalfDays * 0.5;
 
     const totalDeduction = unpaidDays * perDaySalary;
     const netSalary = grossSalaryTillToday - totalDeduction;
@@ -335,80 +336,106 @@ export default function AdminSalary() {
       </div>
 
       {isModalOpen && selectedEmployee && (
-  <div className="fixed inset-0 bg-black/60 bg-opacity-40 flex items-center justify-center z-50">
-    <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-2/3 lg:w-1/2 p-6 relative">
-      <button
-        className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"
-        onClick={() => setIsModalOpen(false)}
-      >
-        X
-      </button>
+        <div className="fixed inset-0 bg-black/60 bg-opacity-40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-11/12 md:w-2/3 lg:w-1/2 p-6 relative">
+            <button
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-800"
+              onClick={() => setIsModalOpen(false)}
+            >
+              X
+            </button>
 
-      <h2 className="text-xl sm:text-2xl font-bold text-center text-blue-700 mb-4">
-        Salary Slip - {selectedEmployee.name}
-      </h2>
+            <h2 className="text-xl sm:text-2xl font-bold text-center text-blue-700 mb-4">
+              Salary Slip - {selectedEmployee.name}
+            </h2>
 
-      <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-6 text-sm md:text-base">
-        <div>Month:</div>
-        <div className="font-semibold">
-          {new Date(selectedYear, selectedMonth).toLocaleString("default", { month: "long", year: "numeric" })}
+            <div className="grid grid-cols-2 gap-y-3 gap-x-4 mb-6 text-sm md:text-base">
+              <div>Month:</div>
+              <div className="font-semibold">
+                {new Date(selectedYear, selectedMonth).toLocaleString(
+                  "default",
+                  { month: "long", year: "numeric" }
+                )}
+              </div>
+
+              <div>Monthly Salary:</div>
+              <div className="font-semibold text-blue-700">
+                ₹ {selectedEmployee.monthlySalary.toFixed(2)}
+              </div>
+
+              <div>
+                {selectedMonth === new Date().getMonth()
+                  ? "Days Till Today:"
+                  : "Days in Month:"}
+              </div>
+              <div className="font-semibold">{daysTillToday}</div>
+
+              <div>Per Day Salary:</div>
+              <div className="font-semibold">
+                ₹{" "}
+                {(selectedEmployee.monthlySalary / totalDaysInMonth).toFixed(2)}
+              </div>
+
+              <div>Present:</div>
+              <div className="font-semibold text-green-700">
+                {selectedEmployee.present}
+              </div>
+
+              <div>Absents:</div>
+              <div className="font-semibold text-red-700">
+                {selectedEmployee.absent}
+              </div>
+
+              <div>Week Off:</div>
+              <div className="font-semibold text-blue-600">
+                {selectedEmployee.weekOff}
+              </div>
+
+              <div>Half Days:</div>
+              <div className="font-semibold text-orange-600">
+                {selectedEmployee.paidHalfDaysUsed +
+                  selectedEmployee.unpaidHalfDays}
+              </div>
+
+              <div>Paid Leaves Used:</div>
+              <div className="font-semibold text-blue-600">
+                {selectedEmployee.paidLeavesUsed}
+              </div>
+
+              <div>Unpaid Leaves:</div>
+              <div className="font-semibold text-red-600">
+                {selectedEmployee.unpaidLeaves}
+              </div>
+
+              <div>Total Deduction:</div>
+              <div className="font-semibold text-red-600">
+                ₹ {selectedEmployee.totalDeduction.toFixed(2)}
+              </div>
+
+              <div>Holidays:</div>
+              <div className="text-green-600 font-semibold">
+                {selectedEmployee.holidays || 0}
+              </div>
+
+              <div className="text-base font-semibold">Net Salary:</div>
+              <div className="text-green-700 text-base font-bold">
+                ₹ {selectedEmployee.netSalary.toFixed(2)}
+              </div>
+            </div>
+
+            <div className="text-center">
+              <button
+                onClick={() =>
+                  generatePDFForMonth(selectedMonth, selectedEmployee)
+                }
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow text-sm font-medium"
+              >
+                Download PDF
+              </button>
+            </div>
+          </div>
         </div>
-
-        <div>Monthly Salary:</div>
-        <div className="font-semibold text-blue-700">
-          ₹ {selectedEmployee.monthlySalary.toFixed(2)}
-        </div>
-
-        <div>{selectedMonth === new Date().getMonth() ? "Days Till Today:" : "Days in Month:"}</div>
-        <div className="font-semibold">{daysTillToday}</div>
-
-        <div>Per Day Salary:</div>
-        <div className="font-semibold">
-          ₹ {(selectedEmployee.monthlySalary / totalDaysInMonth).toFixed(2)}
-        </div>
-
-        <div>Present:</div>
-        <div className="font-semibold text-green-700">{selectedEmployee.present}</div>
-
-        <div>Absents:</div>
-        <div className="font-semibold text-red-700">{selectedEmployee.absent}</div>
-
-        <div>Half Days:</div>
-        <div className="font-semibold text-orange-600">{selectedEmployee.paidHalfDaysUsed + selectedEmployee.unpaidHalfDays}</div>
-
-        <div>Paid Leaves Used:</div>
-        <div className="font-semibold text-blue-600">{selectedEmployee.paidLeavesUsed}</div>
-
-        <div>Unpaid Leaves:</div>
-        <div className="font-semibold text-red-600">{selectedEmployee.unpaidLeaves}</div>
-
-        <div>Total Deduction:</div>
-        <div className="font-semibold text-red-600">
-          ₹ {selectedEmployee.totalDeduction.toFixed(2)}
-        </div>
-
-        <div>Holidays:</div>
-        <div className="text-green-600 font-semibold">{selectedEmployee.holidays || 0}</div>
-
-        <div className="text-base font-semibold">Net Salary:</div>
-        <div className="text-green-700 text-base font-bold">
-          ₹ {selectedEmployee.netSalary.toFixed(2)}
-        </div>
-      </div>
-
-      <div className="text-center">
-        <button
-          onClick={() => generatePDFForMonth(selectedMonth, selectedEmployee)}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow text-sm font-medium"
-        >
-          Download PDF
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
+      )}
     </main>
   );
 }
-
