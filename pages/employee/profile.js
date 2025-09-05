@@ -1,4 +1,3 @@
-// pages/employee/profile.jsx
 import { useState, useEffect } from "react";
 import { ref, get, set } from "firebase/database";
 import { db } from "../../lib/firebase";
@@ -11,89 +10,86 @@ export default function EmployeeProfile() {
   const [employeeId, setEmployeeId] = useState(null);
   const [birthday, setBirthday] = useState("");
   const [documents, setDocuments] = useState(null);
+  const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // Logged-in email from localStorage
-  const email = typeof window !== "undefined" ? localStorage.getItem("email") : null;
-
+  // 1️⃣ Load email from localStorage and fetch full employee data from Firebase
   useEffect(() => {
-    if (!email) return;
+    if (typeof window === "undefined") return;
 
-    let cancelled = false;
+    const storedEmp = JSON.parse(localStorage.getItem("employee"));
+    if (!storedEmp?.email) {
+      setLoading(false);
+      return;
+    }
 
     const fetchEmployee = async () => {
       try {
-        // 1️⃣ Fetch all employees and find the one with matching email
-        const snap = await get(ref(db, "employees"));
-        const employeesData = snap.val();
-        if (!employeesData) return;
+        const employeesSnap = await get(ref(db, "employees"));
+        const employeesData = employeesSnap.val();
+        if (!employeesData) {
+          setLoading(false);
+          return;
+        }
 
+        // Find employee by email
         const empEntry = Object.entries(employeesData).find(
-          ([id, emp]) => emp.email === email
+          ([id, emp]) => emp.email === storedEmp.email
         );
-        if (!empEntry) return;
+        if (!empEntry) {
+          setLoading(false);
+          return;
+        }
 
         const [id, emp] = empEntry;
-        if (cancelled) return;
-
         setEmployee(emp);
         setEmployeeId(id);
 
-        // 2️⃣ Fetch birthday
+        // Fetch birthday
         const birthdaySnap = await get(ref(db, `birthdays/${id}`));
-        if (birthdaySnap.exists()) {
+        if (birthdaySnap.exists())
           setBirthday(birthdaySnap.val()?.birthday || "");
-        }
 
-        // 3️⃣ Fetch documents
+        // Fetch documents
         const docSnap = await get(ref(db, `documents/${id}`));
-        if (docSnap.exists()) {
-          setDocuments(docSnap.val()?.files || null);
-        }
+        if (docSnap.exists()) setDocuments(docSnap.val()?.files || null);
+
+        setLoading(false);
       } catch (error) {
         console.error("Error fetching employee profile:", error);
         toast.error("Failed to load profile.");
+        setLoading(false);
       }
     };
 
     fetchEmployee();
+  }, []);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [email]);
-
+  // 2️⃣ Save birthday
   const handleSave = async () => {
-    if (!birthday) {
-      toast.error("Please select a valid date.");
-      return;
-    }
-
-    if (!employeeId) {
-      toast.error("Employee not found.");
-      return;
-    }
+    if (!birthday) return toast.error("Please select a valid date.");
+    if (!employeeId) return toast.error("Employee not found.");
 
     try {
-      // Save birthday in database
-      await set(ref(db, `birthdays/${employeeId}`), {
-        employeeId,
-        birthday,
-      });
-
+      await set(ref(db, `birthdays/${employeeId}`), { employeeId, birthday });
       toast.success("Birthday updated successfully!");
-
-      // Redirect to employee dashboard after 1 second
-      setTimeout(() => {
-        router.push("/employee/dashboard");
-      }, 1000);
+      setTimeout(() => router.push("/employee/dashboard"), 1000);
     } catch (error) {
       console.error("Error saving birthday:", error);
       toast.error("Failed to update birthday.");
     }
   };
 
-  if (!email) {
+  // 3️⃣ Conditional rendering
+  if (loading) {
+    return (
+      <div className="p-6 text-center">
+        <p className="text-gray-500">Loading...</p>
+      </div>
+    );
+  }
+
+  if (!employee) {
     return (
       <div className="p-6 text-center">
         <p className="text-red-500">No employee logged in.</p>
@@ -105,25 +101,51 @@ export default function EmployeeProfile() {
     <div className="p-8 max-w-md mx-auto bg-white rounded-xl shadow-lg">
       <h2 className="text-2xl font-bold mb-6 text-center">Employee Profile</h2>
 
-      {employee && (
-        <div className="mb-4">
-          <p className="font-medium">Name: {employee.name}</p>
-          <p className="font-medium">Email: {employee.email}</p>
-        </div>
-      )}
-
+      {/* All Employee Details */}
+      <div className="mb-4 space-y-1">
+        <p>
+          <span className="font-medium">Name:</span> {employee.name}
+        </p>
+        <p>
+          <span className="font-medium">Email:</span> {employee.email}
+        </p>
+        <p>
+          <span className="font-medium">Number:</span> {employee.number}
+        </p>
+        <p>
+          <span className="font-medium">Employee ID:</span> {employee.id}
+        </p>
+        <p>
+          <span className="font-medium">Designation:</span>{" "}
+          {employee.designation}
+        </p>
+        <p>
+          <span className="font-medium">Salary:</span> {employee.salary}
+        </p>
+        <p>
+          <span className="font-medium">Joining Date:</span>{" "}
+          {employee.joiningDate}
+        </p>
+      </div>
       {/* Birthday */}
       <div className="mb-4">
         <label className="block mb-2 font-medium">Date of Birth</label>
-        <input
-          type="date"
-          value={birthday}
-          onChange={(e) => setBirthday(e.target.value)}
-          className="w-full p-2 border rounded-lg"
-        />
+
+        {birthday ? (
+          <p className="w-full p-2 border rounded-lg bg-gray-100">
+            Birthday : {new Date(birthday).toLocaleDateString("en-GB")}
+          </p>
+        ) : (
+          <input
+            type="date"
+            value={birthday}
+            onChange={(e) => setBirthday(e.target.value)}
+            className="w-full p-2 border rounded-lg"
+          />
+        )}
       </div>
 
-      {/* Documents Section */}
+      {/* Documents */}
       {documents && (
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-2">Documents</h3>

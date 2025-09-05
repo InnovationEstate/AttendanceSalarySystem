@@ -380,38 +380,40 @@ export default function AdminSalary() {
               <div className="font-semibold text-green-700">
                 {selectedEmployee.present}
               </div>
+            
+              <div>Week Off:</div>
+              <div className="font-semibold text-blue-600">
+                {selectedEmployee.weekOff}
+              </div>
+
+               <div>Half Days:</div>
+              <div className="font-semibold text-orange-600">
+                {selectedEmployee.paidHalfDaysUsed +
+                  selectedEmployee.unpaidHalfDays}
+              </div>
+
+              <div>Holidays:</div>
+              <div className="text-green-600 font-semibold">
+                {selectedEmployee.holidays || 0}
+              </div>
+
+              <div>Paid Leaves:</div>
+              <div className="font-semibold text-blue-600">
+                {selectedEmployee.paidLeavesUsed}
+              </div>
+
+              {/* <div>Unpaid Leaves:</div>
+              <div className="font-semibold text-red-600">
+                {selectedEmployee.unpaidLeaves}
+              </div> */}
 
               <div>Absents:</div>
               <div className="font-semibold text-red-700">
                 {selectedEmployee.absent}
               </div>
 
-              <div>Week Off:</div>
-              <div className="font-semibold text-blue-600">
-                {selectedEmployee.weekOff}
-              </div>
-
-              <div>Half Days:</div>
-              <div className="font-semibold text-orange-600">
-                {selectedEmployee.paidHalfDaysUsed +
-                  selectedEmployee.unpaidHalfDays}
-              </div>
-
-              <div>Paid Leaves Used:</div>
-              <div className="font-semibold text-blue-600">
-                {selectedEmployee.paidLeavesUsed}
-              </div>
-
-              <div>Unpaid Leaves:</div>
-              <div className="font-semibold text-red-600">
-                {selectedEmployee.unpaidLeaves}
-              </div>
-              
-              <div>Holidays:</div>
-              <div className="text-green-600 font-semibold">
-                {selectedEmployee.holidays || 0}
-              </div>
-
+             
+             
               <div>Total Deduction:</div>
               <div className="font-semibold text-red-600">
                 ₹ {selectedEmployee.totalDeduction.toFixed(2)}

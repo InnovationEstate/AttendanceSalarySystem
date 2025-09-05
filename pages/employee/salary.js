@@ -266,14 +266,35 @@ export default function EmployeeSalary() {
     const doc = new jsPDF();
     const monthStr = selectedDate.toLocaleString("default", { month: "long", year: "numeric" });
 
-    doc.setFontSize(18);
-    doc.text("Innovation Estate", 14, 20);
-    doc.setFontSize(12);
-    doc.text("Salary Slip", 14, 30);
-    doc.text(`Month: ${monthStr}`, 14, 36);
-    doc.text(`Employee: ${employee.name}`, 14, 42);
-    doc.text(`Email: ${employee.email}`, 14, 48);
-    doc.text(`Employee ID: ${employee.id}`, 14, 54);
+    // Header
+  doc.setFontSize(16);
+  doc.setTextColor(10, 50, 200);
+  doc.setFont("helvetica", "bold");
+  doc.text("INNOVATION ESTATE", 14, 20);
+  doc.setFontSize(10);
+  doc.setTextColor(0, 0, 0);
+  doc.setFont("helvetica", "normal");
+  doc.text("H-119 , Sector 63 Noida, UP 201301", 14, 26);
+  doc.text("reach@innovationestate.com | innovationestate.com", 14, 32);
+
+  doc.setFont("helvetica", "bold");
+  doc.text("SALARY SLIP", 150, 20);
+  doc.setFont("helvetica", "normal");
+  doc.text(`Month: ${monthStr}`, 150, 26);
+
+  // Employee Info
+  const empInfoStartY = 40;
+  doc.setFontSize(10);
+  const empData = [
+    [`Employee Name: ${employee.name}`, `EMP ID: ${employee.id}`],
+    [`Designation: ${employee.designation}`, `Joining Date: ${employee.joiningDate || ""}`],
+    // [`Department: ${employee.department || ""}`, `UAN: ${employee.uan || ""}`]
+  ];
+
+  empData.forEach((row, idx) => {
+    doc.text(row[0], 14, empInfoStartY + idx * 6);
+    doc.text(row[1], 150, empInfoStartY + idx * 6);
+  });
 
     autoTable(doc, {
       startY: 60,
@@ -292,8 +313,8 @@ export default function EmployeeSalary() {
         ["Absents", pdfAbsent],
         ["Unpaid Half Days", pdfUnpaidHalfDays],
         ["Total Deduction", `${deduction.toFixed(2)}`],
-        ["Net Salary", `${net.toFixed(2)}`],
         ["Paid Holidays", holidayDatesSetForPDF.size],
+        ["Net Salary", `${net.toFixed(2)}`],
       ],
     });
 

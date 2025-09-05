@@ -1,4 +1,3 @@
-// components/ReminderModal.jsx
 import { useState, useEffect } from "react";
 import { ref, get } from "firebase/database";
 import { db } from "../lib/firebase";
@@ -7,39 +6,52 @@ export default function ReminderModal() {
   const [show, setShow] = useState(false);
   const [needsDocs, setNeedsDocs] = useState(false);
   const [needsBirthday, setNeedsBirthday] = useState(false);
+  const [employee, setEmployee] = useState(null);
+  const [employeeId, setEmployeeId] = useState(null);
+  const [loading, setLoading] = useState(true);
 
+  // 1️⃣ Load employee object from localStorage
   useEffect(() => {
-    // Get logged-in email from localStorage
-    const email = typeof window !== "undefined" ? localStorage.getItem("email") : null;
-    if (!email) return;
+    if (typeof window === "undefined") return;
+
+    const storedEmp = JSON.parse(localStorage.getItem("employee"));
+    if (storedEmp) {
+      setEmployee(storedEmp);
+    }
+    setLoading(false);
+  }, []);
+
+  // 2️⃣ Fetch employeeId and reminder info from Firebase
+  useEffect(() => {
+    if (!employee || loading) return;
 
     let cancelled = false;
 
-    (async () => {
+    const fetchReminder = async () => {
       try {
-        // 1️⃣ Fetch all employees
+        // Fetch all employees to find the employeeId using email
         const employeesSnap = await get(ref(db, "employees"));
         const employeesData = employeesSnap.val();
         if (!employeesData) return;
 
-        // 2️⃣ Find the employee by email
         const empEntry = Object.entries(employeesData).find(
-          ([id, emp]) => emp.email === email
+          ([id, emp]) => emp.email === employee.email
         );
         if (!empEntry) return;
 
-        const [employeeId] = empEntry;
+        const [id] = empEntry;
+        setEmployeeId(id);
 
-        // 3️⃣ Check required documents
+        // Check required documents
         const requiredDocs = ["aadhar", "pan", "bank", "photo"];
-        const docsSnap = await get(ref(db, `documents/${employeeId}`));
+        const docsSnap = await get(ref(db, `documents/${id}`));
         const files = docsSnap.val()?.files || {};
         const docsMissing = requiredDocs.some(
           (key) => !files[key] || typeof files[key] !== "object" || !files[key].name
         );
 
-        // 4️⃣ Check birthday
-        const bdaySnap = await get(ref(db, `birthdays/${employeeId}`));
+        // Check birthday
+        const bdaySnap = await get(ref(db, `birthdays/${id}`));
         const birthdayMissing = !bdaySnap.exists() || !bdaySnap.val()?.birthday;
 
         if (cancelled) return;
@@ -50,14 +62,16 @@ export default function ReminderModal() {
       } catch (err) {
         console.error("Error fetching reminder data:", err);
       }
-    })();
+    };
+
+    fetchReminder();
 
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [employee, loading]);
 
-  if (!show) return null;
+  if (loading || !show) return null;
 
   return (
     <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50">

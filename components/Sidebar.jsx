@@ -33,6 +33,7 @@ const employeeNavItems = [
   { name: 'Salary', href: '/employee/salary', icon: <IndianRupee className="w-5 h-5" /> },
   { name: 'Documents', href: '/employee/documents', icon: <FileTextIcon className="w-5 h-5" /> },
   { name: 'Leave Requests', href: '/employee/ApplyLeave', icon: <CalendarCheck className="w-5 h-5" /> },
+  { name: 'Profile', href: '/employee/profile', icon: <Users className="w-5 h-5" /> },
   { name: 'Logout', href: '/employee/logout', icon: <XIcon className="w-5 h-5" /> },
 ]
 
@@ -91,11 +92,11 @@ export default function Sidebar({ role }) {
 
         {/* Desktop Logo */}
         <h1 className="hidden sm:block text-white text-2xl font-bold mb-8 select-none">
-          <Image src="/innovationestate-logo.png" alt="Logo" width={150} height={150} />
+          <Image src="/innovation-logo.webp" alt="Logo" width={150} height={150} />
         </h1>
 
         {/* Navigation */}
-        <nav className="flex flex-col gap-3 overflow-y-auto">
+        <nav className="flex  flex-1 flex-col gap-2 overflow-y-auto">
           {navItems.map(item => {
             const isActive = router.pathname.startsWith(item.href)
             return (
