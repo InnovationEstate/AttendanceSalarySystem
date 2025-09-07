@@ -12,7 +12,8 @@ export default function AdminDocuments() {
   const [loadingDocs, setLoadingDocs] = useState(false);
 
   const docLabels = {
-  aadhar: "Aadhar Card",
+  aadharfront: "Aadhar Card Front",
+  aadharback: "Aadhar Card Back",
   pan: "PAN Card",
   bank: "Bank Details",
   photo: "Photograph",

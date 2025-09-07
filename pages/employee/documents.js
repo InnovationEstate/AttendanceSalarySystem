@@ -9,10 +9,11 @@ import {
 import { db, storage } from "../../lib/firebase";
 import { get, ref as dbRef, set } from "firebase/database";
 
-const requiredDocs = ["aadhar", "pan", "bank", "photo"];
+const requiredDocs = ["aadharfront", "aadharback", "pan", "bank", "photo"];
 const optionalDocs = ["experience"];
 const docLabels = {
-  aadhar: "Aadhar Card",
+  aadharfront: "Aadhar Card Front",
+  aadharback: "Aadhar Card Back",
   pan: "PAN Card",
   bank: "Bank Details",
   photo: "Photograph",

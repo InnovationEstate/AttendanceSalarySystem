@@ -128,22 +128,23 @@ export default function EmployeeProfile() {
         </p>
       </div>
       {/* Birthday */}
-      <div className="mb-4">
-        <label className="block mb-2 font-medium">Date of Birth</label>
+<div className="mb-4">
+  <label className="block mb-2 font-medium">Date of Birth</label>
 
-        {birthday ? (
-          <p className="w-full p-2 border rounded-lg bg-gray-100">
-            Birthday : {new Date(birthday).toLocaleDateString("en-GB")}
-          </p>
-        ) : (
-          <input
-            type="date"
-            value={birthday}
-            onChange={(e) => setBirthday(e.target.value)}
-            className="w-full p-2 border rounded-lg"
-          />
-        )}
-      </div>
+  <input
+    type="date"
+    value={birthday || ""}
+    onChange={(e) => setBirthday(e.target.value)}
+    className="w-full p-2 border rounded-lg"
+  />
+
+  {birthday && (
+    <p className="mt-2 text-gray-700">
+      Selected Date: {new Date(birthday).toLocaleDateString("en-GB")}
+    </p>
+  )}
+</div>
+
 
       {/* Documents */}
       {documents && (

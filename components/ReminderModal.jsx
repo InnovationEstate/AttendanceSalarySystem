@@ -43,7 +43,7 @@ export default function ReminderModal() {
         setEmployeeId(id);
 
         // Check required documents
-        const requiredDocs = ["aadhar", "pan", "bank", "photo"];
+        const requiredDocs = ["aadharfront", "aadharback", "pan", "bank", "photo"];
         const docsSnap = await get(ref(db, `documents/${id}`));
         const files = docsSnap.val()?.files || {};
         const docsMissing = requiredDocs.some(
