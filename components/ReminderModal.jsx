@@ -35,20 +35,19 @@ export default function ReminderModal() {
         if (!employeesData) return;
 
         const empEntry = Object.entries(employeesData).find(
-          ([id, emp]) => emp.email === employee.email
+          ([id, emp]) => emp.email === employee.email 
         );
         if (!empEntry) return;
-
-        const [id] = empEntry;
-        setEmployeeId(id);
+        const [id, emp] = empEntry;
+        const employeeId = emp.id;
+        setEmployeeId(employeeId);
 
         // Check required documents
         const requiredDocs = ["aadharfront", "aadharback", "pan", "bank", "photo"];
-        const docsSnap = await get(ref(db, `documents/${id}`));
+        const docsSnap = await get(ref(db, `documents/${employeeId}`));
         const files = docsSnap.val()?.files || {};
-        const docsMissing = requiredDocs.some(
-          (key) => !files[key] || typeof files[key] !== "object" || !files[key].name
-        );
+        const docsMissing = requiredDocs.some((key) => !files[key] );
+
 
         // Check birthday
         const emailKey = employee.email.replace(/\./g, "_");
