@@ -5,6 +5,9 @@ import { toast, ToastContainer } from "react-toastify";
 import { useRouter } from "next/router";
 import "react-toastify/dist/ReactToastify.css";
 
+// Helper to sanitize email for Firebase key
+const getSafeEmailKey = (email) => email.replace(/\./g, "_");
+
 export default function EmployeeProfile() {
   const [employee, setEmployee] = useState(null);
   const [employeeId, setEmployeeId] = useState(null);
@@ -45,8 +48,10 @@ export default function EmployeeProfile() {
         setEmployee(emp);
         setEmployeeId(id);
 
-        // Fetch birthday
-        const birthdaySnap = await get(ref(db, `birthdays/${id}`));
+        const emailKey = getSafeEmailKey(storedEmp.email);
+
+        // Fetch birthday using emailKey
+        const birthdaySnap = await get(ref(db, `birthdays/${emailKey}`));
         if (birthdaySnap.exists())
           setBirthday(birthdaySnap.val()?.birthday || "");
 
@@ -65,13 +70,15 @@ export default function EmployeeProfile() {
     fetchEmployee();
   }, []);
 
-  // 2️⃣ Save birthday
+  // 2️⃣ Save birthday using sanitized email key
   const handleSave = async () => {
     if (!birthday) return toast.error("Please select a valid date.");
-    if (!employeeId) return toast.error("Employee not found.");
+    if (!employee) return toast.error("Employee not found.");
+
+    const emailKey = getSafeEmailKey(employee.email);
 
     try {
-      await set(ref(db, `birthdays/${employeeId}`), { employeeId, birthday });
+      await set(ref(db, `birthdays/${emailKey}`), { email: employee.email, birthday });
       toast.success("Birthday updated successfully!");
       setTimeout(() => router.push("/employee/dashboard"), 1000);
     } catch (error) {
@@ -127,24 +134,24 @@ export default function EmployeeProfile() {
           {employee.joiningDate}
         </p>
       </div>
+
       {/* Birthday */}
-<div className="mb-4">
-  <label className="block mb-2 font-medium">Date of Birth</label>
+      <div className="mb-4">
+        <label className="block mb-2 font-medium">Date of Birth</label>
 
-  <input
-    type="date"
-    value={birthday || ""}
-    onChange={(e) => setBirthday(e.target.value)}
-    className="w-full p-2 border rounded-lg"
-  />
+        <input
+          type="date"
+          value={birthday || ""}
+          onChange={(e) => setBirthday(e.target.value)}
+          className="w-full p-2 border rounded-lg"
+        />
 
-  {birthday && (
-    <p className="mt-2 text-gray-700">
-      Selected Date: {new Date(birthday).toLocaleDateString("en-GB")}
-    </p>
-  )}
-</div>
-
+        {birthday && (
+          <p className="mt-2 text-gray-700">
+            Selected Date: {new Date(birthday).toLocaleDateString("en-GB")}
+          </p>
+        )}
+      </div>
 
       {/* Documents */}
       {documents && (

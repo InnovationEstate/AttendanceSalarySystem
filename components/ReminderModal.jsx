@@ -51,7 +51,9 @@ export default function ReminderModal() {
         );
 
         // Check birthday
-        const bdaySnap = await get(ref(db, `birthdays/${id}`));
+        const emailKey = employee.email.replace(/\./g, "_");
+        const bdaySnap = await get(ref(db, `birthdays/${emailKey}`));
+
         const birthdayMissing = !bdaySnap.exists() || !bdaySnap.val()?.birthday;
 
         if (cancelled) return;
