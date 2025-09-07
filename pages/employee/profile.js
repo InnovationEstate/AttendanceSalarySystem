@@ -77,8 +77,15 @@ export default function EmployeeProfile() {
 
     const emailKey = getSafeEmailKey(employee.email);
 
+    // Ensure birthday is stored as YYYY-MM-DD
+    const formattedBirthday = new Date(birthday).toISOString().split('T')[0];
+
     try {
-      await set(ref(db, `birthdays/${emailKey}`), { email: employee.email, birthday });
+      await set(ref(db, `birthdays/${emailKey}`), {
+        email: employee.email,
+        birthday: formattedBirthday,
+      });
+
       toast.success("Birthday updated successfully!");
       setTimeout(() => router.push("/employee/dashboard"), 1000);
     } catch (error) {
