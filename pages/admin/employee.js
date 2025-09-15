@@ -83,16 +83,23 @@ export default function EmployeeManagement() {
 
     try {
 // Get all employees
+// Get all employees
 const employeesRef = ref(db, "employees");
 const snapshot = await get(employeesRef);
 const data = snapshot.exists() ? snapshot.val() : {};
 
-// Convert data object to array of employees
-const currentEmployees = Object.values(data);
+// Convert data object to array of [indexKey, employeeData]
+const entries = Object.entries(data);
 
-// Extract numeric parts of IDs and find the max
+// Find max numeric index key
+const numericIndices = entries
+  .map(([key, _]) => parseInt(key, 10))
+  .filter(n => !isNaN(n));
+const nextIndex = numericIndices.length > 0 ? Math.max(...numericIndices) + 1 : 0;
+
+// Extract numeric parts of IDs and find the max ID number
 let maxIdNumber = 0;
-currentEmployees.forEach(emp => {
+Object.values(data).forEach(emp => {
   const match = emp.id.match(/IE25(\d+)/);
   if (match) {
     const num = parseInt(match[1], 10);
@@ -100,18 +107,18 @@ currentEmployees.forEach(emp => {
   }
 });
 
-// Generate new ID by incrementing maxIdNumber
+// Generate new unique employee ID
 const newIdNumber = maxIdNumber + 1;
-const newId = `IE25${String(newIdNumber).padStart(3, "0")}`;
+const newEmployeeId = `IE25${String(newIdNumber).padStart(3, "0")}`;
 
 // Prepare new employee data
 const employeeData = {
-  ...form,
-  id: newId,
+  ...form,  // your form data
+  id: newEmployeeId,
 };
 
-// Save using push to avoid overriding any key
-await set(ref(db, `employees/${newId}`), employeeData);
+// Save using the correct next index (numeric)
+await set(ref(db, `employees/${nextIndex}`), employeeData);;
 
 
       handleCancel();
