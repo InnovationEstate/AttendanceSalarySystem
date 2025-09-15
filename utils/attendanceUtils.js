@@ -29,6 +29,25 @@ export function getLoginMinutesIST(loginISOString) {
   return istDate.getHours() * 60 + istDate.getMinutes();
 }
 
+// utils/attendanceUtils.js
+
+export function getCurrentISTDate() {
+  const now = new Date();
+  const istDate = new Date(
+    now.toLocaleString("en-US", { timeZone: "Asia/Kolkata" })
+  );
+  return istDate;
+}
+
+export function getCurrentISTTime() {
+  const istDate = getCurrentISTDate();
+  const hours = istDate.getHours().toString().padStart(2, "0");
+  const minutes = istDate.getMinutes().toString().padStart(2, "0");
+  const seconds = istDate.getSeconds().toString().padStart(2, "0");
+  return `${hours}:${minutes}:${seconds}`;
+}
+
+
 // Main function: Calculate attendance summary for employee for given month/year
 export default function getAttendanceSummary(
   attendanceData,
