@@ -68,18 +68,50 @@ export default function getAttendanceSummary(
     // Get date string in IST
     const dateStr = getISTDateString(year, month, day);
 
-    // --- Week Off (DB first) ---
-    if (weekOffSet.has(dateStr)) {
-      weekOff++;
-      detailedDays.push({ day, status: "Week Off" });
-      continue;
-    }
+   const dt = new Date(year, month, day);
+const isTuesday = dt.getDay() === 2;
 
-  // --- Fallback: Tuesday week off ---
-// Apply only if: it's Tuesday + no weekoff in DB + no employee record
-const dt = new Date(year, month, day);
-const isTuesday = dt.getDay() === 2; // 0=Sunday, 2=Tuesday
+const prevDateStr = day > 1 ? getISTDateString(year, month, day - 1) : null;
+const nextDateStr =
+  day < totalDays ? getISTDateString(year, month, day + 1) : null;
 
+const prevIsAbsent =
+  prevDateStr &&
+  !holidaysSet.has(prevDateStr) &&
+  !weekOffSet.has(prevDateStr) &&
+  !attendanceData.some(
+    (a) =>
+      a.email &&
+      a.email.toLowerCase() === employeeEmail.toLowerCase() &&
+      a.date === prevDateStr
+  ) &&
+  !approvedLeavesSet.has(prevDateStr);
+
+const nextIsAbsent =
+  nextDateStr &&
+  !holidaysSet.has(nextDateStr) &&
+  !weekOffSet.has(nextDateStr) &&
+  !attendanceData.some(
+    (a) =>
+      a.email &&
+      a.email.toLowerCase() === employeeEmail.toLowerCase() &&
+      a.date === nextDateStr
+  ) &&
+  !approvedLeavesSet.has(nextDateStr);
+
+// --- Week Off (DB first) ---
+if (weekOffSet.has(dateStr)) {
+  if (prevIsAbsent && nextIsAbsent) {
+    absent++;
+    detailedDays.push({ day, status: "Absent (Sandwich Leave)" });
+  } else {
+    weekOff++;
+    detailedDays.push({ day, status: "Week Off" });
+  }
+  continue;
+}
+
+// --- Fallback: Tuesday week off ---
 const hasRecord = attendanceData.some(
   (r) =>
     r.email &&
@@ -87,11 +119,14 @@ const hasRecord = attendanceData.some(
     r.date === dateStr
 );
 
-const hasWeekOffInDB = weekOffSet.has(dateStr);
-
-if (isTuesday && !hasRecord && !hasWeekOffInDB) {
-  weekOff++;
-  detailedDays.push({ day, status: "Week Off" });
+if (isTuesday && !hasRecord && !weekOffSet.has(dateStr)) {
+  if (prevIsAbsent && nextIsAbsent) {
+    absent++;
+    detailedDays.push({ day, status: "Absent" });
+  } else {
+    weekOff++;
+    detailedDays.push({ day, status: "Week Off" });
+  }
   continue;
 }
 

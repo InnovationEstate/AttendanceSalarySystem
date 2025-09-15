@@ -254,6 +254,18 @@ export default function AdminAttendance() {
     const attendanceObj = attendanceSnap.exists() ? attendanceSnap.val() : {};
     const holidaysObj = holidaySnap.exists() ? holidaySnap.val() : {};
 
+    // --- Build quick lookup map: email -> date -> record
+  const attendanceMap = {};
+  for (const dateKey in attendanceObj) {
+    const records = attendanceObj[dateKey];
+    for (const recKey in records) {
+      const rec = records[recKey];
+      const emailLower = (rec.email || "").toLowerCase();
+      if (!attendanceMap[emailLower]) attendanceMap[emailLower] = {};
+      attendanceMap[emailLower][dateKey] = rec;
+    }
+  }
+
     const reportData = [];
 
     for (let day = 1; day <= daysInMonth; day++) {
@@ -322,6 +334,31 @@ export default function AdminAttendance() {
             hour12: true,
           });
         }
+
+        // ---------------- Sandwich Leave Logic ----------------
+      if (status === "Week Off") {
+        const prevDateStr = day > 1
+          ? getISTDateString(currentYear, targetMonth, day - 1)
+          : null;
+        const nextDateStr = day < totalDays
+          ? getISTDateString(currentYear, targetMonth, day + 1)
+          : null;
+
+        const prevAbsent =
+          prevDateStr &&
+          ((attendanceMap[email]?.[prevDateStr]?.status === "Absent") ||
+            (!attendanceMap[email]?.[prevDateStr] && !holidaysObj[prevDateStr]));
+
+        const nextAbsent =
+          nextDateStr &&
+          ((attendanceMap[email]?.[nextDateStr]?.status === "Absent") ||
+            (!attendanceMap[email]?.[nextDateStr] && !holidaysObj[nextDateStr]));
+
+        if (prevAbsent && nextAbsent) {
+          status = "Absent";
+        }
+      }
+
 
         reportData.push({
           Date: dateStr,
@@ -758,6 +795,7 @@ useEffect(() => {
 
     summary.detailedDays.forEach(({ day, status }) => {
       const dateStr = getISTDateString(currentYear, targetMonth, day);
+      const daysInMonth = new Date(currentYear, targetMonth + 1, 0).getDate()
 
       const loginRecord = Object.entries(attendanceObj[dateStr] || {})
         .map(([k, v]) => v)
@@ -799,6 +837,32 @@ useEffect(() => {
       } else {
         finalStatus = "Absent";
       }
+
+     if (finalStatus === "Week Off") {
+  const prevDateStr = day > 1
+    ? getISTDateString(currentYear, targetMonth, day - 1)
+    : null;
+
+  const nextDateStr = day < daysInMonth
+    ? getISTDateString(currentYear, targetMonth, day + 1)
+    : null;
+
+  const prevHasRecord =
+    prevDateStr &&
+    Object.values(attendanceObj[prevDateStr] || {}).some(
+      (rec) => (rec.email || "").toLowerCase() === email.toLowerCase()
+    );
+
+  const nextHasRecord =
+    nextDateStr &&
+    Object.values(attendanceObj[nextDateStr] || {}).some(
+      (rec) => (rec.email || "").toLowerCase() === email.toLowerCase()
+    );
+
+  if (!prevHasRecord && !nextHasRecord) {
+    finalStatus = "Absent";
+  }
+}
 
 
       calendarData.push({
