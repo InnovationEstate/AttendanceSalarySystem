@@ -101,8 +101,29 @@ export default function AdminSalary() {
     [holidays, selectedMonth, selectedYear]
   );
 
+  function getSalaryForMonth(emp, year, month) {
+  const monthKey = `${year}-${String(month + 1).padStart(2, "0")}`; // YYYY-MM
+  let salary = "";
+
+  if (emp.salary && typeof emp.salary === "object") {
+    const months = Object.keys(emp.salary)
+      .filter((m) => m <= monthKey) // only months <= selected month
+      .sort(); // ascending order
+
+    if (months.length > 0) {
+      const lastApplicableMonth = months[months.length - 1];
+      salary = Number(emp.salary[lastApplicableMonth] || 0);
+    }
+  } else {
+    salary = Number(emp.salary || 0);
+  }
+
+  return salary;
+}
+
+
   const employeesWithSalary = employees.map((emp) => {
-    const monthlySalary = emp.salary ? Number(emp.salary) : 0;
+const monthlySalary = getSalaryForMonth(emp, selectedYear, selectedMonth);
 
     // Build weekOff set for this emp
     const weekOffSet = new Set(

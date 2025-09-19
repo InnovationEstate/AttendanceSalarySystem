@@ -1,5 +1,3 @@
-
-
 "use client";
 import { useEffect, useState } from "react";
 import { db } from "@/lib/firebase";
@@ -16,6 +14,7 @@ export default function EmployeeManagement() {
     joiningDate: "",
   });
   const [editingKey, setEditingKey] = useState(null);
+  const [editingId, setEditingId] = useState(null);
   const [showForm, setShowForm] = useState(false);
 
   // 🔹 Delete confirmation modal states
@@ -54,13 +53,38 @@ export default function EmployeeManagement() {
       joiningDate: "",
     });
     setEditingKey(null);
+    setEditingId(null);
     setShowForm(true);
     scrollToForm();
   }
 
   function handleEdit(emp) {
-    setForm(emp);
+    const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+    let currentMonthSalary = "";
+
+    if (emp.salary && typeof emp.salary === "object") {
+      const months = Object.keys(emp.salary).sort();
+      if (emp.salary[currentMonth]) {
+        currentMonthSalary = emp.salary[currentMonth];
+      } else if (months.length > 0) {
+        // fallback to latest previous month
+        currentMonthSalary = emp.salary[months[months.length - 1]];
+      }
+    } else {
+      currentMonthSalary = emp.salary || "";
+    }
+
+    setForm({
+      name: emp.name,
+      email: emp.email,
+      number: emp.number,
+      designation: emp.designation,
+      salary: currentMonthSalary,
+      joiningDate: emp.joiningDate,
+    });
+
     setEditingKey(emp.firebaseKey);
+    setEditingId(emp.id);
     setShowForm(true);
     scrollToForm();
   }
@@ -75,51 +99,76 @@ export default function EmployeeManagement() {
       joiningDate: "",
     });
     setEditingKey(null);
+    setEditingId(null);
     setShowForm(false);
   }
 
   async function handleSubmit(e) {
     e.preventDefault();
+    const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 
     try {
-// Get all employees
-// Get all employees
-const employeesRef = ref(db, "employees");
-const snapshot = await get(employeesRef);
-const data = snapshot.exists() ? snapshot.val() : {};
+      const employeesRef = ref(db, "employees");
+      const snapshot = await get(employeesRef);
+      const data = snapshot.exists() ? snapshot.val() : {};
+      const entries = Object.entries(data);
 
-// Convert data object to array of [indexKey, employeeData]
-const entries = Object.entries(data);
+      if (editingId) {
+        // ---------------------------
+        // EDIT MODE
+        // ---------------------------
+        const entry = entries.find(([_, emp]) => emp.id === editingId);
+        if (!entry) {
+          console.error("Employee not found for editing");
+          return;
+        }
+        const [indexKey, empData] = entry;
 
-// Find max numeric index key
-const numericIndices = entries
-  .map(([key, _]) => parseInt(key, 10))
-  .filter(n => !isNaN(n));
-const nextIndex = numericIndices.length > 0 ? Math.max(...numericIndices) + 1 : 0;
+        // Merge previous salary months with current month
+        const updatedSalary = {
+          ...(empData.salary || {}),
+          [currentMonth]: form.salary,
+        };
 
-// Extract numeric parts of IDs and find the max ID number
-let maxIdNumber = 0;
-Object.values(data).forEach(emp => {
-  const match = emp.id.match(/IE25(\d+)/);
-  if (match) {
-    const num = parseInt(match[1], 10);
-    if (num > maxIdNumber) maxIdNumber = num;
-  }
-});
+        const updatedEmployeeData = {
+          ...empData,
+          ...form,
+          id: editingId,
+          salary: updatedSalary,
+        };
 
-// Generate new unique employee ID
-const newIdNumber = maxIdNumber + 1;
-const newEmployeeId = `IE25${String(newIdNumber).padStart(3, "0")}`;
+        await set(ref(db, `employees/${indexKey}`), updatedEmployeeData);
+      } else {
+        // ---------------------------
+        // ADD MODE
+        // ---------------------------
 
-// Prepare new employee data
-const employeeData = {
-  ...form,  // your form data
-  id: newEmployeeId,
-};
+        const numericIndices = entries
+          .map(([key]) => parseInt(key, 10))
+          .filter((n) => !isNaN(n));
+        const nextIndex = numericIndices.length > 0 ? Math.max(...numericIndices) + 1 : 0;
 
-// Save using the correct next index (numeric)
-await set(ref(db, `employees/${nextIndex}`), employeeData);;
+        let maxIdNumber = 0;
+        Object.values(data).forEach((emp) => {
+          const match = emp.id.match(/IE25(\d+)/);
+          if (match) {
+            const num = parseInt(match[1], 10);
+            if (num > maxIdNumber) maxIdNumber = num;
+          }
+        });
+        const newIdNumber = maxIdNumber + 1;
+        const newEmployeeId = `IE25${String(newIdNumber).padStart(3, "0")}`;
 
+        const newEmployeeData = {
+          ...form,
+          id: newEmployeeId,
+          salary: {
+            [currentMonth]: form.salary,
+          },
+        };
+
+        await set(ref(db, `employees/${nextIndex}`), newEmployeeData);
+      }
 
       handleCancel();
       fetchEmployees();
@@ -128,13 +177,12 @@ await set(ref(db, `employees/${nextIndex}`), employeeData);;
     }
   }
 
-  // 🔹 Show modal before delete
+  // 🔹 Delete modal functions
   function handleDeleteClick(emp) {
     setEmployeeToDelete(emp);
     setShowDeleteModal(true);
   }
 
-  // 🔹 Confirm delete
   async function handleDeleteConfirm() {
     if (!employeeToDelete) return;
     try {
@@ -213,9 +261,7 @@ await set(ref(db, `employees/${nextIndex}`), employeeData);;
             type="text"
             placeholder="Designation"
             value={form.designation}
-            onChange={(e) =>
-              setForm({ ...form, designation: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, designation: e.target.value })}
             className="w-full p-2 border rounded"
             required
           />
@@ -231,9 +277,7 @@ await set(ref(db, `employees/${nextIndex}`), employeeData);;
             type="date"
             placeholder="Joining Date"
             value={form.joiningDate}
-            onChange={(e) =>
-              setForm({ ...form, joiningDate: e.target.value })
-            }
+            onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
             className="w-full p-2 border rounded"
             required
           />
@@ -285,7 +329,16 @@ await set(ref(db, `employees/${nextIndex}`), employeeData);;
                 <td className="p-3">{emp.email}</td>
                 <td className="p-3">{emp.number}</td>
                 <td className="p-3">{emp.designation}</td>
-                <td className="p-3">{emp.salary}</td>
+                <td className="p-3">
+                  {/* Show salary for current month or latest previous month */}
+                  {emp.salary && typeof emp.salary === "object"
+                    ? emp.salary[
+                        Object.keys(emp.salary)
+                          .sort()
+                          .slice(-1)[0]
+                      ]
+                    : emp.salary}
+                </td>
                 <td className="p-3 flex flex-col sm:flex-row gap-2">
                   <button
                     onClick={() => handleEdit(emp)}

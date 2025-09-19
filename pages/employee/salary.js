@@ -133,8 +133,26 @@ export default function EmployeeSalary() {
     );
   }
 
-  const monthlySalary = Number(employee.salary) || 0;
-  const monthToShow = selectedMonth !== null ? selectedMonth : currentMonth;
+  function getSalaryForMonth(employee, selectedMonth) {
+  if (!employee.salary || typeof employee.salary !== "object") return Number(employee.salary) || 0;
+
+  // Get months as YYYY-MM strings and sort ascending
+  const months = Object.keys(employee.salary).sort(); // ["2025-06", "2025-09", ...]
+
+  // Find latest month <= selectedMonth
+  const targetMonthStr = months
+    .filter((m) => {
+      const monthIndex = Number(m.split("-")[1]) - 1; // convert MM to 0-based index
+      return monthIndex <= selectedMonth;
+    })
+    .pop(); // take the last one (latest month before or equal)
+
+  return targetMonthStr ? Number(employee.salary[targetMonthStr]) : 0;
+}
+
+  const monthToShow = selectedMonth ?? new Date().getMonth(); // 0-11
+const monthlySalary = getSalaryForMonth(employee, monthToShow);
+
   const totalDaysInMonth = new Date(currentYear, monthToShow + 1, 0).getDate();
   const attendanceDaysCount = monthToShow === currentMonth ? today : totalDaysInMonth;
 
