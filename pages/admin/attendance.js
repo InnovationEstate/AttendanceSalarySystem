@@ -178,14 +178,31 @@ export default function AdminAttendance() {
       } else {
         const dateKey = selectedDate;
         const empId = emp.id;
+
+        // Get week start (Sunday) and end (Saturday)
+      const selected = new Date(selectedDate);
+      const day = selected.getDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+      const weekStart = new Date(selected);
+      weekStart.setDate(selected.getDate() - day);
+      const weekEnd = new Date(selected);
+      weekEnd.setDate(selected.getDate() + (6 - day));
+
+      // Check if employee has any weekoff in this week
+      const empWeekoffs = weekoffs[empId] || {};
+      const hasWeekoffThisWeek = Object.keys(empWeekoffs).some((wkDate) => {
+        const wk = new Date(wkDate);
+        return wk >= weekStart && wk <= weekEnd;
+      });
+
         // ✅ Weekoff priority: DB entry > fallback Tuesday
-        if (weekoffs[empId] && weekoffs[empId][dateKey]) {
-          status = "Week Off";
-        } else if (new Date(selectedDate).getDay() === 2) {
-          status = "Week Off";
-        } else {
-          status = "Absent";
-        }
+        if (empWeekoffs[dateKey]) {
+        status = "Week Off"; // DB entry for this date
+      } else if (!hasWeekoffThisWeek && selected.getDay() === 2) {
+        // No weekoff this week → default Tuesday
+        status = "Week Off";
+      } else {
+        status = "Absent";
+      }
       }
       return {
         id: emp.id || "N/A",
@@ -831,12 +848,28 @@ useEffect(() => {
       } else if (weekoffs?.[dateStr]) {
         // ✅ Weekoff from DB for this employee
         finalStatus = "Week Off";
-      } else if (new Date(dateStr).getDay() === 2) {
-        // ✅ Fallback: Tuesday (only if admin hasn’t set)
-        finalStatus = "Week Off";
       } else {
-        finalStatus = "Absent";
-      }
+  // ✅ Replace naive Tuesday fallback with this smarter logic
+  const dateObj = new Date(dateStr);
+  const dayOfWeek = dateObj.getDay();
+
+  const weekStart = new Date(dateObj);
+  weekStart.setDate(dateObj.getDate() - dayOfWeek);
+  const weekEnd = new Date(dateObj);
+  weekEnd.setDate(dateObj.getDate() + (6 - dayOfWeek));
+
+  const empWeekoffs = weekoffs || {};
+  const hasWeekoffThisWeek = Object.keys(empWeekoffs).some((wkDate) => {
+    const wk = new Date(wkDate);
+    return wk >= weekStart && wk <= weekEnd;
+  });
+
+  if (!hasWeekoffThisWeek && dayOfWeek === 2) {
+    finalStatus = "Week Off";
+  } else {
+    finalStatus = "Absent";
+  }
+}
 
      if (finalStatus === "Week Off") {
   const prevDateStr = day > 1

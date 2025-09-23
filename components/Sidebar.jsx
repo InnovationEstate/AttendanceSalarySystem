@@ -24,6 +24,7 @@ const adminNavItems = [
   { name: 'Company Holidays', href: '/admin/companyHolidays', icon: <CalendarCheck className="w-5 h-5" /> },
   { name: 'Birthdays', href: '/admin/birthdays', icon: <CalendarCheck className="w-5 h-5" /> },
   { name: 'weekoff', href: '/admin/weekoff', icon: <CalendarCheck className="w-5 h-5" /> },
+  { name: 'Previous Employees', href: '/admin/PreviousEmployees', icon: <Users className="w-5 h-5" /> },
   { name: 'Logout', href: '/admin/logout', icon: <XIcon className="w-5 h-5" /> },
 ]
 

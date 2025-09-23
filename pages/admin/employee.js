@@ -184,16 +184,26 @@ export default function EmployeeManagement() {
   }
 
   async function handleDeleteConfirm() {
-    if (!employeeToDelete) return;
-    try {
-      await remove(ref(db, `employees/${employeeToDelete.firebaseKey}`));
-      setShowDeleteModal(false);
-      setEmployeeToDelete(null);
-      fetchEmployees();
-    } catch (err) {
-      console.error("Error deleting employee:", err);
-    }
+  if (!employeeToDelete) return;
+
+  try {
+    // 1. Move employee to pastEmps
+    await set(ref(db, `pastEmps/${employeeToDelete.firebaseKey}`), {
+      ...employeeToDelete,
+      deletedAt: new Date().toISOString(), // track when deleted
+    });
+
+    // 2. Remove from employees
+    await remove(ref(db, `employees/${employeeToDelete.firebaseKey}`));
+
+    // 3. Cleanup UI state
+    setShowDeleteModal(false);
+    setEmployeeToDelete(null);
+    fetchEmployees(); // refresh the employee list
+  } catch (err) {
+    console.error("Error moving employee to pastEmps:", err);
   }
+}
 
   function handleCancelDelete() {
     setEmployeeToDelete(null);
@@ -208,7 +218,7 @@ export default function EmployeeManagement() {
       }
     }, 100);
   }
-
+  
   return (
     <main className="p-4 sm:p-6 bg-gray-50 min-h-screen text-sm sm:text-base">
       {/* Header */}

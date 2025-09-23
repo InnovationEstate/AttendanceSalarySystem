@@ -111,6 +111,36 @@ if (holidaysObj[dateStr]) {
 }
 // 2. Weekoff (use weekoffsObj directly)
 else if (weekoffsObj[dateStr]) {
+  // ✅ Check if employee has a login record on this weekoff
+  const loginRecord = allEntries.find(
+    (a) =>
+      a.date === dateStr &&
+      a.email.toLowerCase() === fullEmployee.email.toLowerCase()
+  );
+
+  if (loginRecord) {
+    if (loginRecord.login) {
+      // Convert login time to IST
+      const loginTimeIST = new Date(
+        new Date(loginRecord.login).toLocaleString("en-US", {
+          timeZone: "Asia/Kolkata",
+        })
+      );
+      const loginHour = loginTimeIST.getHours();
+      const loginMinute = loginTimeIST.getMinutes();
+
+      // ✅ If login on/before 11:00 AM → Present, else Half Day
+      if (loginHour < 11 || (loginHour === 11 && loginMinute === 0)) {
+        finalStatus = "Present";
+      } else {
+        finalStatus = "Half Day";
+      }
+    } else {
+      // ✅ Fallback: login exists but no time
+      finalStatus = "Present";
+    }
+  } else {
+    // 🔄 No login on weekoff → check sandwich leave
   // Check Sandwich Leave: previous and next days absent
   const prevDateStr = day > 1 ? getISTDateString(currentYear, targetMonth, day - 1) : null;
   const nextDateStr = day < dateObj ? getISTDateString(currentYear, targetMonth, day + 1) : null;
@@ -142,6 +172,7 @@ else if (weekoffsObj[dateStr]) {
   } else {
     finalStatus = "Week Off";
   }
+}
 }
 // 3. Approved Leave
 else if (leaveObj[dateStr] && leaveObj[dateStr].status === "approved") {
