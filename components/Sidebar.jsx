@@ -72,54 +72,59 @@ export default function Sidebar({ role }) {
 
       {/* Sidebar */}
       <aside
-        className={`fixed top-0 left-0 h-screen w-64 max-w-[80%] bg-blue-600 z-50
-          flex flex-col transform transition-transform duration-300 ease-in-out
-          ${isOpen ? 'translate-x-0' : '-translate-x-full'} 
-          sm:translate-x-0 sm:static
-        `}
-      >
-        {/* Mobile Header */}
-        <div className="flex justify-between items-center p-4 sm:hidden shrink-0">
-          <h1 className="text-white text-xl font-bold">Innovation Estate</h1>
-          <button
-            onClick={() => setIsOpen(false)}
-            className="p-1 rounded-md bg-blue-700 hover:bg-blue-800 text-white"
-          >
-            <XIcon className="w-6 h-6" />
-          </button>
-        </div>
+  className={`
+    fixed top-0 left-0 h-screen bg-blue-600 z-50
+    flex flex-col transform transition-transform duration-300 ease-in-out
+    w-64 max-w-[80%]
+    ${isOpen ? 'translate-x-0' : '-translate-x-full'}
+    sm:translate-x-0 sm:static sm:w-56
+    md:w-64 md:max-w-[20%]
+    lg:w-64
+  `}
+>
+  {/* Mobile Header */}
+  <div className="flex justify-between items-center p-4 sm:hidden shrink-0">
+    <h1 className="text-white text-xl font-bold">Innovation Estate</h1>
+    <button
+      onClick={() => setIsOpen(false)}
+      className="p-1 rounded-md bg-blue-700 hover:bg-blue-800 text-white"
+    >
+      <XIcon className="w-6 h-6" />
+    </button>
+  </div>
 
-        {/* Desktop Logo */}
-        <div className="hidden sm:flex justify-center p-4 shrink-0">
-          <Image src="/innovation-logo.webp" alt="Logo" width={150} height={150} />
-        </div>
+  {/* Desktop Logo (Tablet & PC) */}
+  <div className="hidden sm:flex justify-center p-4 shrink-0">
+    <Image src="/innovation-logo.webp" alt="Logo" width={150} height={150} />
+  </div>
 
-        {/* Scrollable Navigation */}
-        <nav className="flex-1 overflow-y-auto px-2 space-y-1">
-          {navItems.map(item => {
-            const isActive = router.pathname.startsWith(item.href)
-            return (
-              <Link
-                key={item.name}
-                href={item.href}
-                className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors
-                  ${isActive
-                    ? 'bg-blue-100 text-blue-700 font-semibold'
-                    : 'text-white hover:bg-blue-500 hover:text-white'}
-                `}
-              >
-                {item.icon}
-                <span>{item.name}</span>
-              </Link>
-            )
-          })}
-        </nav>
+  {/* Scrollable Navigation */}
+  <nav className="flex-1 overflow-y-auto px-2 space-y-1">
+    {navItems.map(item => {
+      const isActive = router.pathname.startsWith(item.href)
+      return (
+        <Link
+          key={item.name}
+          href={item.href}
+          className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors
+            ${isActive
+              ? 'bg-blue-100 text-blue-700 font-semibold'
+              : 'text-white hover:bg-blue-500 hover:text-white'}
+          `}
+        >
+          {item.icon}
+          <span>{item.name}</span>
+        </Link>
+      )
+    })}
+  </nav>
 
-        {/* Footer (Sticky) */}
-        <div className="sticky pl-5 bottom-3 border-t border-blue-400 text-white text-md shrink-0">
-          Logged in as <strong>{role === 'admin' ? 'Admin' : 'Employee'}</strong>
-        </div>
-      </aside>
+  {/* Footer (Sticky at Bottom) */}
+  <div className="sticky bottom-0 p-4 border-t border-blue-400 text-white text-md shrink-0">
+    Logged in as <strong>{role === 'admin' ? 'Admin' : 'Employee'}</strong>
+  </div>
+</aside>
+
     </>
   )
 }
