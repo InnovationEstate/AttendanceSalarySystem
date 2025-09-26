@@ -102,7 +102,7 @@ export default function Sidebar({ role }) {
               <Link
                 key={item.name}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-md transition-colors
+                className={`flex items-center gap-3 px-4 py-2 rounded-md transition-colors
                   ${isActive
                     ? 'bg-blue-100 text-blue-700 font-semibold'
                     : 'text-white hover:bg-blue-500 hover:text-white'}
@@ -116,7 +116,7 @@ export default function Sidebar({ role }) {
         </nav>
 
         {/* Footer (Sticky) */}
-        <div className="p-4 border-t border-blue-400 text-white text-sm shrink-0">
+        <div className="sticky pl-5 bottom-3 border-t border-blue-400 text-white text-md shrink-0">
           Logged in as <strong>{role === 'admin' ? 'Admin' : 'Employee'}</strong>
         </div>
       </aside>
