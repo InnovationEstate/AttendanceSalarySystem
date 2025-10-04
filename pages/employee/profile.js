@@ -5,8 +5,15 @@ import { toast, ToastContainer } from "react-toastify";
 import { useRouter } from "next/router";
 import "react-toastify/dist/ReactToastify.css";
 
-// Helper to sanitize email for Firebase key
 const getSafeEmailKey = (email) => email.replace(/\./g, "_");
+
+// 🧩 Helper to get the latest salary value from an object
+const getLatestSalary = (salaryObj) => {
+  if (!salaryObj || typeof salaryObj !== "object") return salaryObj || "N/A";
+  const months = Object.keys(salaryObj).sort();
+  const latestMonth = months[months.length - 1];
+  return salaryObj[latestMonth];
+};
 
 export default function EmployeeProfile() {
   const [employee, setEmployee] = useState(null);
@@ -16,7 +23,6 @@ export default function EmployeeProfile() {
   const [loading, setLoading] = useState(true);
   const router = useRouter();
 
-  // 1️⃣ Load email from localStorage and fetch full employee data from Firebase
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -35,7 +41,6 @@ export default function EmployeeProfile() {
           return;
         }
 
-        // Find employee by email
         const empEntry = Object.entries(employeesData).find(
           ([id, emp]) => emp.email === storedEmp.email
         );
@@ -50,12 +55,10 @@ export default function EmployeeProfile() {
 
         const emailKey = getSafeEmailKey(storedEmp.email);
 
-        // Fetch birthday using emailKey
         const birthdaySnap = await get(ref(db, `birthdays/${emailKey}`));
         if (birthdaySnap.exists())
           setBirthday(birthdaySnap.val()?.birthday || "");
 
-        // Fetch documents
         const docSnap = await get(ref(db, `documents/${id}`));
         if (docSnap.exists()) setDocuments(docSnap.val()?.files || null);
 
@@ -70,15 +73,12 @@ export default function EmployeeProfile() {
     fetchEmployee();
   }, []);
 
-  // 2️⃣ Save birthday using sanitized email key
   const handleSave = async () => {
     if (!birthday) return toast.error("Please select a valid date.");
     if (!employee) return toast.error("Employee not found.");
 
     const emailKey = getSafeEmailKey(employee.email);
-
-    // Ensure birthday is stored as YYYY-MM-DD
-    const formattedBirthday = new Date(birthday).toISOString().split('T')[0];
+    const formattedBirthday = new Date(birthday).toISOString().split("T")[0];
 
     try {
       await set(ref(db, `birthdays/${emailKey}`), {
@@ -94,7 +94,6 @@ export default function EmployeeProfile() {
     }
   };
 
-  // 3️⃣ Conditional rendering
   if (loading) {
     return (
       <div className="p-6 text-center">
@@ -110,6 +109,8 @@ export default function EmployeeProfile() {
       </div>
     );
   }
+
+  const latestSalary = getLatestSalary(employee.salary);
 
   return (
     <div className="p-8 max-w-md mx-auto bg-white rounded-xl shadow-lg">
@@ -133,9 +134,12 @@ export default function EmployeeProfile() {
           <span className="font-medium">Designation:</span>{" "}
           {employee.designation}
         </p>
+
+        {/* 🧾 Fixed salary rendering */}
         <p>
-          <span className="font-medium">Salary:</span> {employee.salary}
+          <span className="font-medium">Salary:</span> ₹{latestSalary}
         </p>
+
         <p>
           <span className="font-medium">Joining Date:</span>{" "}
           {employee.joiningDate}
@@ -145,14 +149,12 @@ export default function EmployeeProfile() {
       {/* Birthday */}
       <div className="mb-4">
         <label className="block mb-2 font-medium">Date of Birth</label>
-
         <input
           type="date"
           value={birthday || ""}
           onChange={(e) => setBirthday(e.target.value)}
           className="w-full p-2 border rounded-lg"
         />
-
         {birthday && (
           <p className="mt-2 text-gray-700">
             Selected Date: {new Date(birthday).toLocaleDateString("en-GB")}
