@@ -104,78 +104,100 @@ export default function EmployeeManagement() {
   }
 
   async function handleSubmit(e) {
-    e.preventDefault();
-    const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
+  e.preventDefault();
+  const currentMonth = new Date().toISOString().slice(0, 7); // "YYYY-MM"
 
-    try {
-      const employeesRef = ref(db, "employees");
-      const snapshot = await get(employeesRef);
-      const data = snapshot.exists() ? snapshot.val() : {};
-      const entries = Object.entries(data);
+  try {
+    // Fetch both databases
+    const [employeesSnap, pastEmpsSnap] = await Promise.all([
+      get(ref(db, "employees")),
+      get(ref(db, "pastEmps")),
+    ]);
 
-      if (editingId) {
-        // ---------------------------
-        // EDIT MODE
-        // ---------------------------
-        const entry = entries.find(([_, emp]) => emp.id === editingId);
-        if (!entry) {
-          console.error("Employee not found for editing");
-          return;
-        }
-        const [indexKey, empData] = entry;
+    const employeesData = employeesSnap.exists() ? employeesSnap.val() : {};
+    const pastEmpsData = pastEmpsSnap.exists() ? pastEmpsSnap.val() : {};
 
-        // Merge previous salary months with current month
-        const updatedSalary = {
-          ...(empData.salary || {}),
-          [currentMonth]: form.salary,
-        };
+    const employeeEntries = Object.entries(employeesData);
+    const pastEmpEntries = Object.entries(pastEmpsData);
 
-        const updatedEmployeeData = {
-          ...empData,
-          ...form,
-          id: editingId,
-          salary: updatedSalary,
-        };
-
-        await set(ref(db, `employees/${indexKey}`), updatedEmployeeData);
-      } else {
-        // ---------------------------
-        // ADD MODE
-        // ---------------------------
-
-        const numericIndices = entries
-          .map(([key]) => parseInt(key, 10))
-          .filter((n) => !isNaN(n));
-        const nextIndex = numericIndices.length > 0 ? Math.max(...numericIndices) + 1 : 0;
-
-        let maxIdNumber = 0;
-        Object.values(data).forEach((emp) => {
-          const match = emp.id.match(/IE25(\d+)/);
-          if (match) {
-            const num = parseInt(match[1], 10);
-            if (num > maxIdNumber) maxIdNumber = num;
-          }
-        });
-        const newIdNumber = maxIdNumber + 1;
-        const newEmployeeId = `IE25${String(newIdNumber).padStart(3, "0")}`;
-
-        const newEmployeeData = {
-          ...form,
-          id: newEmployeeId,
-          salary: {
-            [currentMonth]: form.salary,
-          },
-        };
-
-        await set(ref(db, `employees/${nextIndex}`), newEmployeeData);
+    if (editingId) {
+      // ---------------------------
+      // EDIT MODE
+      // ---------------------------
+      const entry = employeeEntries.find(([_, emp]) => emp.id === editingId);
+      if (!entry) {
+        console.error("Employee not found for editing");
+        return;
       }
+      const [indexKey, empData] = entry;
 
-      handleCancel();
-      fetchEmployees();
-    } catch (err) {
-      console.error("Error saving employee:", err);
+      // Merge previous salary months with current month
+      const updatedSalary = {
+        ...(empData.salary || {}),
+        [currentMonth]: form.salary,
+      };
+
+      const updatedEmployeeData = {
+        ...empData,
+        ...form,
+        id: editingId,
+        salary: updatedSalary,
+      };
+
+      await set(ref(db, `employees/${indexKey}`), updatedEmployeeData);
+    } else {
+      // ---------------------------
+      // ADD MODE
+      // ---------------------------
+
+      // Get numeric indexes across both
+      const allNumericIndices = [
+        ...employeeEntries.map(([k]) => parseInt(k, 10)),
+        ...pastEmpEntries.map(([k]) => parseInt(k, 10)),
+      ].filter((n) => !isNaN(n));
+
+      const nextIndex =
+        allNumericIndices.length > 0
+          ? Math.max(...allNumericIndices) + 1
+          : 0;
+
+      // Get max ID across both
+      let maxIdNumber = 0;
+
+      const allEmpsCombined = [
+        ...Object.values(employeesData),
+        ...Object.values(pastEmpsData),
+      ];
+
+      allEmpsCombined.forEach((emp) => {
+        const match = emp.id?.match(/IE25(\d+)/);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (num > maxIdNumber) maxIdNumber = num;
+        }
+      });
+
+      const newIdNumber = maxIdNumber + 1;
+      const newEmployeeId = `IE25${String(newIdNumber).padStart(3, "0")}`;
+
+      const newEmployeeData = {
+        ...form,
+        id: newEmployeeId,
+        salary: {
+          [currentMonth]: form.salary,
+        },
+      };
+
+      await set(ref(db, `employees/${nextIndex}`), newEmployeeData);
     }
+
+    handleCancel();
+    fetchEmployees();
+  } catch (err) {
+    console.error("Error saving employee:", err);
   }
+}
+
 
   // 🔹 Delete modal functions
   function handleDeleteClick(emp) {
